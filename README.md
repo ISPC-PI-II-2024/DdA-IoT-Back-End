@@ -1,35 +1,35 @@
 # 🌐 Documentacion del proyecto 
 
-> Desarrollo de una interfaz web interactiva para enseñar conceptos de telecomunicaciones e IoT
+> Desarrollo de servidor backend para dar soporte al proyecto Monitoreo de Silo IoT
 
 ## 🎯 Objetivo
-Diseñar y desarrollar un frontend educativo que permita a estudiantes visualizar datos en tiempo real, simular redes IoT y comprender protocolos de telecomunicaciones.
+Diseñar y desarrollar un servidor educativo que permita datos en tiempo real, almacenarlos de forma permanente y permitir el analisis posterior de los mismos. Ademas alojar una pagina web.
 
 ## 👥 Equipo
-- Jose Marquez -[GitHub:marquezjose](https://github.com/marquezjose)
-- Lisandro JUncos - [GitHub:Lisandro-05](https://github.com/Lisandro-05)
-- Pantoja, Paola Natalia Alejandra - [GitHub: PaolaaPantoja](https://github.com/PaolaaPantoja)
-- Paez, Tiziano Adrian - [GitHub: tpaez](https://github.com/tpaez)
-- María Lilen Guzmán- [GitHub:lilenguzman01](https://github.com/lilenguzman01)
+- Macarena Carballo -[GitHub:Macarena Carballo](https://github.com/MacarenaAC)
+- Raul Jara - [GitHub:Raul Jara](https://github.com/r-j28)
+- Diego Ares - [GitHub: Diego Ares](https://github.com/diegote7)
+- Fernando Gimenez Coria - [GitHub: Fernando Gimenez Coria](https://github.com/FerCbr)
+
 
 ## 📂 Estructura del repositorio
 | Carpeta | Contenido |
 |--------|---------|
 | `a_requisitos/` | Definición del problema, objetivos y funcionalidades |
 | `b_investigacion/` | Fundamentos técnicos, protocolos y arquitectura |
-| `c_prototipo/` | Código del frontend, pruebas y evidencias |
+| `c_prototipo/` | Código del backend, pruebas y evidencias |
 | `d_presentacion/` | Presentación final, guion y reflexión |
 | `assets/` | Imágenes, diagramas y recursos multimedia |
 
 ## ⚙️ Tecnologías utilizadas
-- Frontend: React.js / Vue.js (COMPLETAR CON FRAMEWORK CORRECTO)
-- Visualización: Chart.js o D3.js (COMPLETAR CON FRAMEWORK CORRECTO)
-- Comunicación: WiFi, MQTT sobre WebSockets o REST API
-- Estilos: Tailwind CSS o Bootstrap
-- Hosting: A DEFINIR
+- Docker - Portainer
+- Nginx
+- Mosquitto MQTT 
+- MariaDB - MongoDB - InfluxDB (a definir) 
+
 
 ## 📚 Resultados esperados
-- Interfaz web interactiva para monitoreo de sensores IoT.
+- Servidor completo, funcional para dar soporte a proyecto "Monitoreo de Silo"
 - Documentación completa del proceso ABP.
 
 ## 📎 Enlaces útiles
