@@ -1,5 +1,10 @@
 #!/bin/bash
-cd ~/docker
+set -euo pipefail
+
+# Ir al directorio del compose (este script vive en scripts/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE_DIR="${SCRIPT_DIR%/scripts}"
+cd "$COMPOSE_DIR"
 
 echo "🔄 Actualizando App IoT..."
 
@@ -15,13 +20,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-cd ~/docker
+cd "$COMPOSE_DIR"
 
 echo "🔨 Reconstruyendo backend..."
-docker-compose build --no-cache iot-backend
+docker compose build --no-cache iot-backend
 
 echo "🔄 Reiniciando servicios..."
-docker-compose up -d iot-backend iot-frontend
+docker compose up -d iot-backend iot-frontend
 
 echo "⏳ Esperando a que los servicios estén listos..."
 sleep 10

@@ -34,7 +34,8 @@ services:
       - ./nginx-proxy-manager/data:/data
       - ./nginx-proxy-manager/letsencrypt:/etc/letsencrypt
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.11
     depends_on:
       - portainer
 
@@ -57,11 +58,12 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
     restart: unless-stopped
-    command: tunnel --no-autoupdate run  --token eyJhIjoiYzk3ZDU0ZjhiNzQyNWUwM2VkM2YzODk3YjlmNGJlODIiLCJ0IjoiZmVjMTIzNmQtYTJkOS00MTU5LTgzOWYtMDE5MDk2MjI5OTFkIiwicyI6Ik1tWTJOR0l3TURrdE9EWTRaUzAwTWpabUxUZzVaamd0WWpZNVl6ZG1aREJqWldWbCJ9 #${CLOUDFLARE_TUNNEL_TOKEN}
-    # environment:
-    #  - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.12
 
   # -----------------------------
   # SILO SERVICES
@@ -80,7 +82,8 @@ services:
     volumes:
       - ./services/silo/mariadb/data:/var/lib/mysql
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.20
 
   # InfluxDB
   influxdb:
@@ -94,7 +97,8 @@ services:
     volumes:
       - ./services/silo/influxdb/data:/var/lib/influxdb
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.21
 
   # Telegraf
   telegraf:
@@ -104,7 +108,8 @@ services:
     volumes:
       - ./services/silo/telegraf/config/telegraf.conf:/etc/telegraf/telegraf.conf:ro
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.22
     depends_on:
       - influxdb
       - mosquitto
@@ -122,7 +127,8 @@ services:
       - ./services/silo/mosquitto/data:/mosquitto/data
       - ./services/silo/mosquitto/log:/mosquitto/log
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.23
 
   # Node-RED
   nodered:
@@ -136,7 +142,8 @@ services:
     environment:
       - NODE_RED_ENABLE_PROJECTS=true
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.24
     depends_on:
       - mosquitto
       - influxdb
@@ -153,7 +160,8 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.25
     depends_on:
       - influxdb
 
@@ -163,7 +171,8 @@ services:
     container_name: silo-adminer
     restart: unless-stopped
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.26
     depends_on:
       - mariadb
       - influxdb
@@ -195,7 +204,8 @@ services:
       - ADMIN_WHITELIST=${ADMIN_WHITELIST}
       - ACTION_WHITELIST=${ACTION_WHITELIST}
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.30
     depends_on:
       - mariadb
       - mosquitto
@@ -211,16 +221,19 @@ services:
     container_name: iot-frontend
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "5000:80"
     volumes:
-      #- ./services/iot-app/frontend:/usr/share/nginx/html
-      #- ./services/iot-app/repo/C-Prototipo/frontend/c:/usr/share/nginx/html:ro
-      - /home/fernandogc/docker/services/iot-app/repo/C-Prototipo/frontend/public:/usr/share/nginx/html:ro
+      - ./services/iot-app/repo/C-Prototipo/frontend/public:/usr/share/nginx/html:ro
     networks:
-      - silo-network
+      silo-network:
+        ipv4_address: 172.20.0.31
     depends_on:
       - iot-backend
 
 networks:
   silo-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

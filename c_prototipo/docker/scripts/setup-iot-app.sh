@@ -1,5 +1,10 @@
 #!/bin/bash
-cd ~/docker
+set -euo pipefail
+
+# Ir al directorio del compose (este script vive en scripts/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE_DIR="${SCRIPT_DIR%/scripts}"
+cd "$COMPOSE_DIR"
 
 echo "🚀 Configuración inicial de la App IoT..."
 
@@ -7,7 +12,7 @@ echo "🚀 Configuración inicial de la App IoT..."
 if [ ! -d "services/iot-app/repo" ]; then
     echo "❌ Error: El repositorio no está clonado en services/iot-app/repo"
     echo "💡 Ejecuta primero:"
-    echo "   cd ~/docker/services/iot-app"
+    echo "   cd services/iot-app"
     echo "   git clone https://github.com/ISPC-PI-II-2024/DdA-IoT-Web-App.git repo"
     exit 1
 fi
@@ -29,10 +34,10 @@ echo "✅ Estructura del repositorio verificada"
 
 # Construir y levantar servicios
 echo "🔨 Construyendo backend..."
-docker-compose build iot-backend
+docker compose build iot-backend
 
 echo "🚀 Iniciando servicios..."
-docker-compose up -d iot-backend iot-frontend
+docker compose up -d iot-backend iot-frontend
 
 echo "⏳ Esperando a que el backend esté listo..."
 sleep 10
@@ -53,4 +58,4 @@ echo ""
 echo "📝 Comandos útiles:"
 echo "   - Ver logs: docker logs iot-backend -f"
 echo "   - Actualizar: ./scripts/update-iot-app.sh"
-echo "   - Detener: docker-compose stop iot-backend iot-frontend"
+echo "   - Detener: docker compose stop iot-backend iot-frontend"
