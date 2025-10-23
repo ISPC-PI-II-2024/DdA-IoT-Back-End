@@ -1,0 +1,40 @@
+# MariaDB
+MYSQL_ROOT_PASSWORD=root@siloiot2025
+MYSQL_DATABASE=silo_db
+MYSQL_USER=silo_user
+MYSQL_PASSWORD=user@siloiot2015
+
+# InfluxDB
+INFLUXDB_DB=metricas_silo
+INFLUXDB_ADMIN_USER=admin
+INFLUXDB_ADMIN_PASSWORD=influx@siloiot2025
+INFLUXDB_USER=telegraf_user
+INFLUXDB_USER_PASSWORD=telegraf@siloiot2025
+
+# Grafana
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=grafana@siloiot2025
+
+# ----------------------------
+# CLOUDFLARE (Opcional - si usas tunnel token)
+# ----------------------------
+CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYzk3ZDU0ZjhiNzQyNWUwM2VkM2YzODk3YjlmNGJlODIiLCJ0IjoiZmVjMTIzNmQtYTJkOS00MTU5LTgzOWYtMDE5MDk2MjI5OTFkIiwicyI6Ik4yWTJOakk0TWpndE1UWmlPUzAwT0dSbExUbGhZemd0WVdabE1tSmpaVGRrTlRjMyJ9
+# CLOUDFLARE_TUNNEL_TOKEN=tu_token_aqui
+
+# ----------------------------
+# MQTT (Mosquitto - credenciales opcionales)
+# ----------------------------
+# MOSQUITTO_USER=mqtt_user
+# MOSQUITTO_PASSWORD=Mqtt_P@ss_2024!
+# Cloudflare (opcional - si usas variables)
+# CLOUDFLARE_TUNNEL_TOKEN=your_tunnel_token_here
+
+# App IoT
+JWT_SECRET=tu_jwt_secret_de_64_caracteres_aqui
+GOOGLE_CLIENT_ID=tu_google_client_id
+MQTT_TOPICS=sensors/temperature,sensors/humidity
+ADMIN_WHITELIST=tu_email_admin@gmail.com
+ACTION_WHITELIST=tu_email_operador@gmail.com
+GITHUB_TOKEN=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
+# Para generar JWT_SECRET:
+# openssl rand -hex 32
