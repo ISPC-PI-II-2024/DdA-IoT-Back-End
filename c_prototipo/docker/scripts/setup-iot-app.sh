@@ -1,5 +1,27 @@
-#!/bin/bash
-cd ~/docker
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Detectar Docker Compose (v2 plugin o v1 binario)
+COMPOSE_CMD=""
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "❌ Docker Compose no encontrado. Instala Docker Compose v2 (plugin) o docker-compose v1."
+  exit 1
+fi
+
+# Comprobar acceso a Docker (permiso/grupo)
+if ! docker info >/dev/null 2>&1; then
+  echo "⚠️  No se pudo acceder a Docker. Si ves 'permission denied', ejecuta el script con sudo o agrega tu usuario al grupo docker:"
+  echo "   sudo usermod -aG docker $(whoami) && newgrp docker"
+fi
+
+# Ir al directorio del compose (este script vive en scripts/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE_DIR="${SCRIPT_DIR%/scripts}"
+cd "$COMPOSE_DIR"
 
 echo "🚀 Configuración inicial de la App IoT..."
 
@@ -7,7 +29,7 @@ echo "🚀 Configuración inicial de la App IoT..."
 if [ ! -d "services/iot-app/repo" ]; then
     echo "❌ Error: El repositorio no está clonado en services/iot-app/repo"
     echo "💡 Ejecuta primero:"
-    echo "   cd ~/docker/services/iot-app"
+    echo "   cd services/iot-app"
     echo "   git clone https://github.com/ISPC-PI-II-2024/DdA-IoT-Web-App.git repo"
     exit 1
 fi
@@ -29,10 +51,10 @@ echo "✅ Estructura del repositorio verificada"
 
 # Construir y levantar servicios
 echo "🔨 Construyendo backend..."
-docker-compose build iot-backend
+${COMPOSE_CMD} build iot-backend
 
 echo "🚀 Iniciando servicios..."
-docker-compose up -d iot-backend iot-frontend
+${COMPOSE_CMD} up -d iot-backend iot-frontend
 
 echo "⏳ Esperando a que el backend esté listo..."
 sleep 10
@@ -53,4 +75,4 @@ echo ""
 echo "📝 Comandos útiles:"
 echo "   - Ver logs: docker logs iot-backend -f"
 echo "   - Actualizar: ./scripts/update-iot-app.sh"
-echo "   - Detener: docker-compose stop iot-backend iot-frontend"
+echo "   - Detener: ${COMPOSE_CMD} stop iot-backend iot-frontend"
