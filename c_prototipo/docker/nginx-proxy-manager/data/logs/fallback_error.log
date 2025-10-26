@@ -18,3 +18,5 @@
 2025/10/22 01:47:57 [alert] 185#185: worker process 210 exited on signal 9
 2025/10/23 00:50:52 [alert] 238#238: 512 worker_connections are not enough
 2025/10/23 00:50:53 [error] 239#239: *1005 recv() failed (104: Connection reset by peer) while reading response header from upstream, client: 127.0.0.1, server: localhost-nginx-proxy-manager, request: "GET /favicon.ico HTTP/1.1", upstream: "http://127.0.0.1:80/favicon.ico", host: "192.168.0.45", referrer: "http://192.168.0.45/"
+2025/10/26 02:04:06 [error] 208#208: *3 connect() failed (111: Connection refused) while connecting to upstream, client: 192.168.0.4, server: nginxproxymanager, request: "GET /api/ HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "192.168.0.45:81", referrer: "http://192.168.0.45:81/"
+2025/10/26 02:04:12 [error] 207#207: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 192.168.0.4, server: nginxproxymanager, request: "POST /api/tokens HTTP/1.1", upstream: "http://127.0.0.1:3000/tokens", host: "192.168.0.45:81", referrer: "http://192.168.0.45:81/login"
