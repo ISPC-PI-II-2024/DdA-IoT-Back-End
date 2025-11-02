@@ -1,0 +1,184 @@
+1761629376: mosquitto version 2.0.22 starting
+1761629376: Config loaded from /mosquitto/config/mosquitto.conf.
+1761629376: Opening ipv4 listen socket on port 1883.
+1761629376: Opening ipv6 listen socket on port 1883.
+1761629376: Opening websockets listen socket on port 9001.
+1761629376: mosquitto version 2.0.22 running
+1761629378: New connection from 172.18.0.11:37626 on port 1883.
+1761629378: New client connected from 172.18.0.11:37626 as telegraf_mqtt_consumer (p2, c1, k60).
+1761629378: mosquitto version 2.0.22 terminating
+1761629378: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761629379: mosquitto version 2.0.22 starting
+1761629379: Config loaded from /mosquitto/config/mosquitto.conf.
+1761629379: Opening ipv4 listen socket on port 1883.
+1761629379: Opening ipv6 listen socket on port 1883.
+1761629379: Opening websockets listen socket on port 9001.
+1761629379: mosquitto version 2.0.22 running
+1761629380: New connection from 172.18.0.11:37638 on port 1883.
+1761629380: New client connected from 172.18.0.11:37638 as telegraf_mqtt_consumer (p2, c1, k60).
+1761629423: New connection from 172.18.0.1:33448 on port 1883.
+1761629423: New client connected from 172.18.0.1:33448 as mqtt_simulator (p2, c1, k60).
+1761629476: Client mqtt_simulator disconnected.
+1761629479: New connection from 172.18.0.1:37888 on port 1883.
+1761629479: New client connected from 172.18.0.1:37888 as mqtt_simulator (p2, c1, k60).
+1761629546: Client telegraf_mqtt_consumer disconnected.
+1761629546: New connection from 172.18.0.11:34942 on port 1883.
+1761629546: New client connected from 172.18.0.11:34942 as telegraf_mqtt_consumer (p2, c1, k60).
+1761629559: New connection from 172.18.0.9:44798 on port 1883.
+1761629559: New client connected from 172.18.0.9:44798 as iot-webapp-1761629559735-f012s7715 (p2, c1, k60).
+1761629624: Client iot-webapp-1761629559735-f012s7715 closed its connection.
+1761629626: New connection from 172.18.0.9:56550 on port 1883.
+1761629626: New client connected from 172.18.0.9:56550 as iot-webapp-1761629626743-jz8lmengp (p2, c1, k60).
+1761630057: Client iot-webapp-1761629626743-jz8lmengp closed its connection.
+1761630058: New connection from 172.18.0.9:53860 on port 1883.
+1761630058: New client connected from 172.18.0.9:53860 as iot-webapp-1761630058792-6qrk5riix (p2, c1, k60).
+1761630736: Client iot-webapp-1761630058792-6qrk5riix closed its connection.
+1761630737: New connection from 172.18.0.9:50222 on port 1883.
+1761630737: New client connected from 172.18.0.9:50222 as iot-webapp-1761630737588-z4f6cvztg (p2, c1, k60).
+1761630838: Client iot-webapp-1761630737588-z4f6cvztg closed its connection.
+1761630839: New connection from 172.18.0.9:57658 on port 1883.
+1761630839: New client connected from 172.18.0.9:57658 as iot-webapp-1761630839625-79wxfqu0c (p2, c1, k60).
+1761631180: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761631181: Client iot-webapp-1761630839625-79wxfqu0c closed its connection.
+1761631182: New connection from 172.18.0.9:37042 on port 1883.
+1761631182: New client connected from 172.18.0.9:37042 as iot-webapp-1761631182612-ifl7tnrmh (p2, c1, k60).
+1761631229: Client iot-webapp-1761631182612-ifl7tnrmh closed its connection.
+1761631230: New connection from 172.18.0.9:48726 on port 1883.
+1761631230: New client connected from 172.18.0.9:48726 as iot-webapp-1761631230015-2p1i99eoc (p2, c1, k60).
+1761631331: Client iot-webapp-1761631230015-2p1i99eoc closed its connection.
+1761631332: New connection from 172.18.0.9:56534 on port 1883.
+1761631332: New client connected from 172.18.0.9:56534 as iot-webapp-1761631332396-uhbbitebi (p2, c1, k60).
+1761631471: Client iot-webapp-1761631332396-uhbbitebi closed its connection.
+1761631472: New connection from 172.18.0.9:43630 on port 1883.
+1761631472: New client connected from 172.18.0.9:43630 as iot-webapp-1761631472192-yopb99ks6 (p2, c1, k60).
+1761631576: Client iot-webapp-1761631472192-yopb99ks6 closed its connection.
+1761631577: New connection from 172.18.0.9:43836 on port 1883.
+1761631577: New client connected from 172.18.0.9:43836 as iot-webapp-1761631577490-skhzh31qc (p2, c1, k60).
+1761631620: Client telegraf_mqtt_consumer disconnected.
+1761631631: Client iot-webapp-1761631577490-skhzh31qc closed its connection.
+1761631631: mosquitto version 2.0.22 terminating
+1761631631: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761631652: mosquitto version 2.0.22 starting
+1761631652: Config loaded from /mosquitto/config/mosquitto.conf.
+1761631652: Opening ipv4 listen socket on port 1883.
+1761631652: Opening ipv6 listen socket on port 1883.
+1761631652: Opening websockets listen socket on port 9001.
+1761631652: mosquitto version 2.0.22 running
+1761631657: New connection from 172.18.0.4:46648 on port 1883.
+1761631657: New client connected from 172.18.0.4:46648 as iot-webapp-1761631657185-wwlj8bltx (p2, c1, k60).
+1761631658: New connection from 172.18.0.1:59146 on port 1883.
+1761631658: New client connected from 172.18.0.1:59146 as mqtt_simulator (p2, c1, k60).
+1761631725: New connection from 172.18.0.12:47736 on port 1883.
+1761631725: New client connected from 172.18.0.12:47736 as telegraf_mqtt_consumer (p2, c1, k60).
+1761633101: Client iot-webapp-1761631657185-wwlj8bltx closed its connection.
+1761633104: New connection from 172.18.0.4:57490 on port 1883.
+1761633104: New client connected from 172.18.0.4:57490 as iot-webapp-1761633104009-iz8u8xhl7 (p2, c1, k60).
+1761633291: New connection from ::1:60200 on port 1883.
+1761633291: New client connected from ::1:60200 as auto-C050B10A-C562-E381-9EA7-160706F5071F (p2, c1, k60).
+1761633293: Client auto-C050B10A-C562-E381-9EA7-160706F5071F disconnected.
+1761633453: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761634142: Client iot-webapp-1761633104009-iz8u8xhl7 closed its connection.
+1761634144: New connection from 172.18.0.4:33314 on port 1883.
+1761634144: New client connected from 172.18.0.4:33314 as iot-webapp-1761634144681-kgbs5leo8 (p2, c1, k60).
+1761634185: Client telegraf_mqtt_consumer disconnected.
+1761634206: Client iot-webapp-1761634144681-kgbs5leo8 closed its connection.
+1761634206: mosquitto version 2.0.22 terminating
+1761634206: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761634727: mosquitto version 2.0.22 starting
+1761634727: Config loaded from /mosquitto/config/mosquitto.conf.
+1761634727: Opening ipv4 listen socket on port 1883.
+1761634727: Opening ipv6 listen socket on port 1883.
+1761634727: Opening websockets listen socket on port 9001.
+1761634727: mosquitto version 2.0.22 running
+1761634732: New connection from 172.18.0.8:53712 on port 1883.
+1761634732: New client connected from 172.18.0.8:53712 as telegraf_mqtt_consumer (p2, c1, k60).
+1761634735: New connection from 172.18.0.11:49546 on port 1883.
+1761634735: New client connected from 172.18.0.11:49546 as iot-webapp-1761634735506-2a1ds9epr (p2, c1, k60).
+1761634741: New connection from 172.18.0.1:37310 on port 1883.
+1761634741: New client connected from 172.18.0.1:37310 as mqtt_simulator (p2, c1, k60).
+1761671567: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761676103: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761677904: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761679705: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761681505: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761683306: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761685107: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761689469: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761691653: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761693454: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761695403: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761697204: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761742524: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761744325: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761748217: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761750018: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761753643: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761759714: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761763924: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761765872: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761767673: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761769848: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761771649: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761773450: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761815578: Client mqtt_simulator closed its connection.
+1761815579: New connection from 172.18.0.1:39754 on port 1883.
+1761815579: New client connected from 172.18.0.1:39754 as mqtt_simulator (p2, c1, k60).
+1761818465: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761820265: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761822064: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761823865: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761825666: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761827467: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761829268: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761831069: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761832869: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761834677: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761836478: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761838279: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761840079: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761841880: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761843681: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761845482: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761847283: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761849084: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761850885: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761852686: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761870527: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761872328: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761876962: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761958238: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761959561: Client mqtt_simulator closed its connection.
+1761960039: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761961840: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761963641: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1761965442: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762007907: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762009707: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762011508: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762013309: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762015110: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762016911: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762018712: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762021298: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762023099: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762075315: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762082007: New connection from 172.18.0.1:45814 on port 1883.
+1762082007: New client connected from 172.18.0.1:45814 as mqtt_simulator (p2, c1, k60).
+1762083237: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762083541: Client iot-webapp-1761634735506-2a1ds9epr closed its connection.
+1762083543: New connection from 172.18.0.11:47086 on port 1883.
+1762083543: New client connected from 172.18.0.11:47086 as iot-webapp-1762083543768-allz4ah9c (p2, c1, k60).
+1762085038: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762085230: Client iot-webapp-1762083543768-allz4ah9c closed its connection.
+1762085232: New connection from 172.18.0.11:39576 on port 1883.
+1762085232: New client connected from 172.18.0.11:39576 as iot-webapp-1762085232265-qnaxz8o72 (p2, c1, k60).
+1762085682: Client iot-webapp-1762085232265-qnaxz8o72 closed its connection.
+1762085685: New connection from 172.18.0.11:60428 on port 1883.
+1762085685: New client connected from 172.18.0.11:60428 as iot-webapp-1762085685353-4b6pllys1 (p2, c1, k60).
+1762086609: Client iot-webapp-1762085685353-4b6pllys1 closed its connection.
+1762086621: New connection from 172.18.0.11:38526 on port 1883.
+1762086621: New client connected from 172.18.0.11:38526 as iot-webapp-1762086621951-uharjpo91 (p2, c1, k60).
+1762086838: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1762086952: Client iot-webapp-1762086621951-uharjpo91 closed its connection.
+1762086955: New connection from 172.18.0.11:57746 on port 1883.
+1762086955: New client connected from 172.18.0.11:57746 as iot-webapp-1762086955078-629agkl5c (p2, c1, k60).

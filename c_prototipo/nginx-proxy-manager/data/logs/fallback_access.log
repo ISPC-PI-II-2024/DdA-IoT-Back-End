@@ -1,0 +1,1 @@
+[28/Oct/2025:04:08:15 +0000] 404 - GET http localhost "/api/devices" [Client 172.18.0.1] [Length 150] [Gzip -] "curl/8.15.0" "-"

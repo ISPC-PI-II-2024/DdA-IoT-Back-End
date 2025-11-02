@@ -1,0 +1,1 @@
+2025/10/28 04:08:15 [error] 200#200: *1 open() "/var/www/html/api/devices" failed (2: No such file or directory), client: 172.18.0.1, server: localhost-nginx-proxy-manager, request: "GET /api/devices HTTP/1.1", host: "localhost"
