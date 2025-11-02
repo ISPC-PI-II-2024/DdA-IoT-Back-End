@@ -1,0 +1,26 @@
+{
+  "name": "c-prototipo-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "influx": "^5.11.0",
+    "joi": "^17.13.3",
+    "jose": "^5.8.0",
+    "mariadb": "^3.4.5",
+    "morgan": "^1.10.0",
+    "mqtt": "^5.14.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.0.0"
+  }
+}
