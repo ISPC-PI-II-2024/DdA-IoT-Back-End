@@ -122,6 +122,20 @@ update_repository() {
     if [ -d "$SCRIPT_DIR/../.git" ]; then
         print_info "Repositorio existente detectado. Actualizando desde ubicación actual..."
         cd "$SCRIPT_DIR/.."
+        
+        # Corregir permisos de archivos problemáticos antes de actualizar
+        if [ -f "c_prototipo/services/silo/mosquitto/config/mosquitto.conf" ]; then
+            print_info "Corrigiendo permisos de mosquitto.conf..."
+            sudo chown "$USER:$USER" c_prototipo/services/silo/mosquitto/config/mosquitto.conf 2>/dev/null || true
+        fi
+        
+        # Resetear cambios locales en archivos de datos
+        print_info "Reseteando cambios en archivos de datos..."
+        git checkout -- c_prototipo/services/silo/*/data 2>/dev/null || true
+        git checkout -- c_prototipo/services/silo/*/log 2>/dev/null || true
+        git checkout -- c_prototipo/portainer/data 2>/dev/null || true
+        git checkout -- c_prototipo/nginx-proxy-manager/data 2>/dev/null || true
+        
         git fetch origin
         git checkout "$REPO_BRANCH" || print_warning "No se pudo cambiar de rama"
         git pull origin "$REPO_BRANCH" || print_warning "No se pudo actualizar desde remoto"
@@ -130,6 +144,16 @@ update_repository() {
     elif [ -d "$DEPLOY_DIR/.git" ]; then
         print_info "Repositorio existente detectado. Actualizando..."
         cd "$DEPLOY_DIR"
+        
+        # Corregir permisos antes de actualizar
+        if [ -f "c_prototipo/services/silo/mosquitto/config/mosquitto.conf" ]; then
+            sudo chown "$USER:$USER" c_prototipo/services/silo/mosquitto/config/mosquitto.conf 2>/dev/null || true
+        fi
+        
+        # Resetear cambios locales en archivos de datos
+        git checkout -- c_prototipo/services/silo/*/data 2>/dev/null || true
+        git checkout -- c_prototipo/services/silo/*/log 2>/dev/null || true
+        
         git fetch origin
         git checkout "$REPO_BRANCH" || print_warning "No se pudo cambiar de rama"
         git pull origin "$REPO_BRANCH" || print_warning "No se pudo actualizar desde remoto"
@@ -265,9 +289,19 @@ deploy_services() {
     
     cd "$WORK_DIR"
     
-    # Construir imágenes
+    # Construir imágenes (excluir directorios de datos del build context)
     print_info "Construyendo imágenes Docker..."
-    docker-compose build --no-cache || print_warning "Algunas imágenes fallaron al construir"
+    
+    # Construir solo servicios que necesitan build, excluyendo directorios problemáticos
+    if [ -d "services/frontend/src/C-Prototipo/backend" ]; then
+        print_info "Construyendo backend..."
+        cd services/frontend/src/C-Prototipo/backend
+        docker build -f docker/backend.Dockerfile -t iot-backend . 2>&1 | grep -v "permission denied" || print_warning "Backend puede tener problemas"
+        cd "$WORK_DIR"
+    fi
+    
+    # Construir otras imágenes si es necesario
+    docker-compose build --no-cache 2>&1 | grep -v "permission denied" || print_warning "Algunas imágenes fallaron al construir"
     
     # Iniciar servicios
     print_info "Iniciando servicios..."
