@@ -162,12 +162,171 @@ export function renderNavbar() {
 
   const draw = () => {
     const { user, role } = getState();
+    
+    // Crear botón hamburguesa para móvil
+    const hamburgerBtn = el("button", {
+      class: "navbar-hamburger",
+      id: "navbar-hamburger",
+      "aria-label": "Abrir menú de navegación",
+      onclick: () => {
+        const nav = document.querySelector('.navbar-nav');
+        const overlay = document.getElementById('navbar-overlay');
+        if (nav && overlay) {
+          nav.classList.toggle('mobile-menu-active');
+          nav.classList.toggle('active');
+          overlay.classList.toggle('active');
+          const btn = document.getElementById('navbar-hamburger');
+          if (btn) {
+            btn.textContent = nav.classList.contains('mobile-menu-active') ? '✕' : '☰';
+            btn.setAttribute('aria-expanded', nav.classList.contains('mobile-menu-active'));
+          }
+        }
+      }
+    }, "☰");
+    
+    // Crear overlay para cerrar menú
+    const overlay = el("div", {
+      class: "navbar-overlay",
+      id: "navbar-overlay",
+      onclick: () => {
+        const nav = document.querySelector('.navbar-nav');
+        const overlay = document.getElementById('navbar-overlay');
+        if (nav && overlay) {
+          nav.classList.remove('mobile-menu-active', 'active');
+          overlay.classList.remove('active');
+          const btn = document.getElementById('navbar-hamburger');
+          if (btn) {
+            btn.textContent = '☰';
+            btn.setAttribute('aria-expanded', 'false');
+          }
+        }
+      }
+    });
+    
+    const nav = buildLeft(role);
+    const userBox = buildRight(user, role);
+    
+    // Crear contenedor para el botón "Salir" en el menú móvil
+    const mobileLogoutContainer = el("div", {
+      class: "navbar-mobile-logout",
+      style: "display: none;"
+    });
+    
+    // Clonar el botón de logout para el menú móvil
+    if (user) {
+      const mobileLogoutBtn = el("button", {
+        class: "btn-logout mobile-logout-btn",
+        style: "width: 100%; margin-top: var(--espaciado-md); padding: var(--espaciado-sm) var(--espaciado-md); background: var(--color-acento); color: var(--color-blanco); border: none; border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 600; cursor: pointer;",
+        onClick: async (event) => {
+          try {
+            // Mostrar indicador de logout
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = "Cerrando sesión...";
+            button.disabled = true;
+            
+            // Realizar logout de Google
+            await performGoogleLogout();
+            
+            // Limpiar sesión local
+            clearSession();
+            logout();
+            
+            // Cerrar WebSocket si está conectado
+            try {
+              if (rtClient && rtClient.ws) {
+                rtClient.ws.close();
+                console.log('WebSocket cerrado');
+              }
+            } catch (wsError) {
+              console.warn('Error cerrando WebSocket:', wsError);
+            }
+            
+            // Cerrar menú móvil
+            const nav = document.querySelector('.navbar-nav');
+            const overlay = document.getElementById('navbar-overlay');
+            if (nav && overlay) {
+              nav.classList.remove('mobile-menu-active', 'active');
+              overlay.classList.remove('active');
+              const btn = document.getElementById('navbar-hamburger');
+              if (btn) {
+                btn.textContent = '☰';
+                btn.setAttribute('aria-expanded', 'false');
+              }
+            }
+            
+            // Redirigir a login
+            location.hash = "#/login";
+          } catch (error) {
+            console.error('Error durante logout:', error);
+            clearSession();
+            logout();
+            try {
+              if (rtClient && rtClient.ws) {
+                rtClient.ws.close();
+              }
+            } catch (wsError) {
+              console.warn('Error cerrando WebSocket:', wsError);
+            }
+            location.hash = "#/login";
+          }
+        }
+      }, "🚪 Salir");
+      mobileLogoutContainer.appendChild(mobileLogoutBtn);
+    } else {
+      const mobileLoginBtn = el("button", {
+        class: "btn-login mobile-login-btn",
+        style: "width: 100%; margin-top: var(--espaciado-md); padding: var(--espaciado-sm) var(--espaciado-md); background: var(--color-acento); color: var(--color-blanco); border: none; border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 600; cursor: pointer;",
+        onClick: () => {
+          // Cerrar menú móvil
+          const nav = document.querySelector('.navbar-nav');
+          const overlay = document.getElementById('navbar-overlay');
+          if (nav && overlay) {
+            nav.classList.remove('mobile-menu-active', 'active');
+            overlay.classList.remove('active');
+            const btn = document.getElementById('navbar-hamburger');
+            if (btn) {
+              btn.textContent = '☰';
+              btn.setAttribute('aria-expanded', 'false');
+            }
+          }
+          location.hash = "#/login";
+        }
+      }, "🔑 Ingresar");
+      mobileLogoutContainer.appendChild(mobileLoginBtn);
+    }
+    
+    // Agregar el contenedor de logout al menú de navegación
+    nav.appendChild(mobileLogoutContainer);
+    
+    // Agregar listener para cerrar menú al hacer clic en un link
+    setTimeout(() => {
+      const navLinks = nav.querySelectorAll('a');
+      navLinks.forEach(link => {
+        link.addEventListener('click', () => {
+          const nav = document.querySelector('.navbar-nav');
+          const overlay = document.getElementById('navbar-overlay');
+          if (nav && overlay) {
+            nav.classList.remove('mobile-menu-active', 'active');
+            overlay.classList.remove('active');
+            const btn = document.getElementById('navbar-hamburger');
+            if (btn) {
+              btn.textContent = '☰';
+              btn.setAttribute('aria-expanded', 'false');
+            }
+          }
+        });
+      });
+    }, 100);
+    
     const bar = el(
       "div",
       { class: "navbar" },
+      hamburgerBtn,
       el("div", { class: "navbar-logo" }, "ISPC Desarrollo Aplicaciones"),
-      buildLeft(role),
-      buildRight(user, role)
+      nav,
+      userBox,
+      overlay
     );
     root.innerHTML = "";
     root.appendChild(bar);

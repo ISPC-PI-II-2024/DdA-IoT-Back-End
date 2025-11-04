@@ -48,3 +48,54 @@ async function createDefaultUser(email) {
     console.error("Error creando usuario por defecto:", error);
   }
 }
+
+/**
+ * Obtiene todos los usuarios activos agrupados por tecnicatura
+ * Solo selecciona campos necesarios para optimizar la query y reducir el tamaño de la respuesta
+ * @returns {Promise<Object>} Objeto con tecnicaturas como keys y arrays de usuarios como values
+ */
+export async function getUsersByTecnicatura() {
+  try {
+    const conn = await pool.getConnection();
+    // Solo seleccionar campos necesarios para reducir el tamaño de la respuesta
+    const rows = await conn.query(`
+      SELECT 
+        id,
+        github,
+        nombre,
+        foto_url,
+        tecnicatura
+      FROM usuarios 
+      WHERE activo = 1 
+        AND tecnicatura IS NOT NULL 
+        AND tecnicatura != ''
+        AND nombre IS NOT NULL
+        AND nombre != ''
+      ORDER BY tecnicatura ASC, nombre ASC
+    `);
+    conn.release();
+
+    // Agrupar por tecnicatura
+    const groupedByTecnicatura = {};
+    
+    rows.forEach(user => {
+      const tecnicatura = user.tecnicatura || 'Sin tecnicatura';
+      
+      if (!groupedByTecnicatura[tecnicatura]) {
+        groupedByTecnicatura[tecnicatura] = [];
+      }
+      
+      groupedByTecnicatura[tecnicatura].push({
+        id: user.id,
+        nombre: user.nombre,
+        github: user.github,
+        foto_url: user.foto_url
+      });
+    });
+
+    return groupedByTecnicatura;
+  } catch (error) {
+    console.error("Error obteniendo usuarios por tecnicatura:", error);
+    throw error;
+  }
+}

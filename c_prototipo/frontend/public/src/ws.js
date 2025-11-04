@@ -79,7 +79,7 @@ export class RTClient {
     this.isConnecting = true;
     
     this.closing = false;
-    const token = storage.get(TOKEN_KEY, null, true);
+    const token = storage.get(TOKEN_KEY, null, false); // Usar localStorage
     if (!token) {
       console.error("WebSocket: Sin token de autenticación");
       this.isConnecting = false;

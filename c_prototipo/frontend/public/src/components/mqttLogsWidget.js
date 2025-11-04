@@ -9,11 +9,13 @@ export function mqttLogsWidget() {
   let logsFooter = el("div", { class: "logs-footer" });
   
   let logs = [];
+  let filteredLogs = [];
   const maxLogs = 50; // Máximo número de logs a mostrar
   let isAutoScroll = true;
   let isExpanded = false;
+  let searchQuery = "";
 
-  // Crear el header con controles
+  // Crear el header con controles y buscador
   logsHeader.innerHTML = `
     <div class="logs-title">
       <h4>📡 Logs MQTT en Tiempo Real</h4>
@@ -29,8 +31,21 @@ export function mqttLogsWidget() {
         </button>
       </div>
     </div>
+    <div class="logs-search-container">
+      <input 
+        type="text" 
+        id="logs-search-input" 
+        class="logs-search-input" 
+        placeholder="🔍 Buscar en logs (tema, tipo, contenido)..."
+        autocomplete="off"
+      />
+      <button id="clear-search" class="btn-icon" title="Limpiar búsqueda" style="display: none;">
+        <span class="icon">✕</span>
+      </button>
+    </div>
     <div class="logs-stats">
       <span id="logs-count">0 mensajes</span>
+      <span id="logs-filtered-count" style="display: none;"></span>
       <span id="logs-status" class="status-indicator">●</span>
     </div>
   `;
@@ -81,14 +96,48 @@ export function mqttLogsWidget() {
     updateStats();
   };
 
+  // Función para filtrar logs según la búsqueda
+  const filterLogs = () => {
+    if (!searchQuery || searchQuery.trim() === "") {
+      filteredLogs = [...logs];
+    } else {
+      const query = searchQuery.toLowerCase().trim();
+      filteredLogs = logs.filter(log => {
+        const topicMatch = log.topic.toLowerCase().includes(query);
+        const typeMatch = log.type.toLowerCase().includes(query);
+        const dataStr = typeof log.data === 'string' 
+          ? log.data.toLowerCase() 
+          : JSON.stringify(log.data).toLowerCase();
+        const dataMatch = dataStr.includes(query);
+        const timestampMatch = log.timestamp.toLowerCase().includes(query);
+        
+        return topicMatch || typeMatch || dataMatch || timestampMatch;
+      });
+    }
+  };
+
   // Función para renderizar los logs
   const renderLogs = () => {
+    filterLogs();
     logsList.innerHTML = '';
     
-    logs.forEach(log => {
+    const logsToRender = searchQuery ? filteredLogs : logs;
+    
+    logsToRender.forEach(log => {
       const logElement = createLogElement(log);
       logsList.appendChild(logElement);
     });
+
+    // Actualizar contador de resultados filtrados
+    const filteredCountElement = logsContainer.querySelector('#logs-filtered-count');
+    if (filteredCountElement) {
+      if (searchQuery && searchQuery.trim() !== "") {
+        filteredCountElement.textContent = ` (${filteredLogs.length} encontrados)`;
+        filteredCountElement.style.display = "inline";
+      } else {
+        filteredCountElement.style.display = "none";
+      }
+    }
 
     // Auto-scroll si está habilitado
     if (isAutoScroll) {
@@ -163,6 +212,27 @@ export function mqttLogsWidget() {
     }
   };
 
+  // Función para manejar la búsqueda
+  const handleSearch = (query) => {
+    searchQuery = query;
+    renderLogs();
+    
+    // Mostrar/ocultar botón de limpiar búsqueda
+    const clearSearchBtn = logsContainer.querySelector('#clear-search');
+    if (clearSearchBtn) {
+      clearSearchBtn.style.display = query && query.trim() !== "" ? "inline-flex" : "none";
+    }
+  };
+
+  // Función para limpiar búsqueda
+  const clearSearch = () => {
+    const searchInput = logsContainer.querySelector('#logs-search-input');
+    if (searchInput) {
+      searchInput.value = "";
+    }
+    handleSearch("");
+  };
+
   // Función para limpiar logs
   const clearLogs = () => {
     logs = [];
@@ -198,8 +268,34 @@ export function mqttLogsWidget() {
       toggleAutoScroll();
     } else if (e.target.closest('#toggle-expand')) {
       toggleExpansion();
+    } else if (e.target.closest('#clear-search')) {
+      clearSearch();
     }
   });
+
+  // Event listener para el buscador
+  setTimeout(() => {
+    const searchInput = logsContainer.querySelector('#logs-search-input');
+    if (searchInput) {
+      // Búsqueda en tiempo real con debounce
+      let searchTimeout;
+      searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          handleSearch(e.target.value);
+        }, 300); // Debounce de 300ms
+      });
+
+      // Búsqueda al presionar Enter
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          clearTimeout(searchTimeout);
+          handleSearch(e.target.value);
+        }
+      });
+    }
+  }, 100);
 
   // Suscribirse a todos los tipos de mensajes MQTT
   const subscribeToMQTTLogs = () => {

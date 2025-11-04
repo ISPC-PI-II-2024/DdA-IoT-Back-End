@@ -28,39 +28,132 @@ export async function render() {
   // Solicitar permiso para notificaciones
   alertService.requestNotificationPermission();
 
-  const header = el("div", { class: "card card-feature" },
+  // Crear menú de navegación con botón hamburguesa
+  const dashboardNav = el("nav", { class: "dashboard-nav-menu" },
+    el("button", { 
+      class: "dashboard-nav-toggle",
+      id: "dashboard-nav-toggle",
+      "aria-label": "Abrir menú de navegación",
+      onclick: () => {
+        const menu = dashboardNav;
+        const overlay = document.getElementById('dashboard-nav-overlay');
+        if (menu && overlay) {
+          menu.classList.toggle('mobile-menu');
+          menu.classList.toggle('active');
+          overlay.classList.toggle('active');
+          // Cambiar icono del botón
+          const toggleBtn = document.getElementById('dashboard-nav-toggle');
+          if (toggleBtn) {
+            toggleBtn.textContent = menu.classList.contains('active') ? '✕' : '☰';
+          }
+        }
+      }
+    }, "☰"),
+    el("div", { class: "dashboard-nav-overlay", id: "dashboard-nav-overlay", onclick: () => {
+      const menu = dashboardNav;
+      const overlay = document.getElementById('dashboard-nav-overlay');
+      if (menu && overlay) {
+        menu.classList.remove('mobile-menu', 'active');
+        overlay.classList.remove('active');
+        const toggleBtn = document.getElementById('dashboard-nav-toggle');
+        if (toggleBtn) {
+          toggleBtn.textContent = '☰';
+        }
+      }
+    }}),
+    el("ul", {},
+      el("li", {},
+        el("a", { href: "#dashboard-header", "data-section": "header" }, "📊 Inicio")
+      ),
+      el("li", {},
+        el("a", { href: "#dashboard-general-status", "data-section": "general-status" }, "⚡ Estado General")
+      ),
+      el("li", {},
+        el("a", { href: "#dashboard-system-status", "data-section": "system-status" }, "🔧 Sistema")
+      ),
+      el("li", {},
+        el("a", { href: "#dashboard-alerts", "data-section": "alerts" }, "⚠️ Alertas")
+      ),
+      el("li", {},
+        el("a", { href: "#dashboard-hierarchy", "data-section": "hierarchy" }, "🌐 Jerarquía")
+      ),
+      el("li", {},
+        el("a", { href: "#dashboard-device-selector", "data-section": "device-selector" }, "📱 Dispositivos")
+      ),
+      el("li", {},
+        el("a", { href: "#dashboard-mqtt-logs", "data-section": "mqtt-logs" }, "📝 Logs MQTT")
+      )
+    )
+  );
+
+  // Añadir IDs y clases a cada sección
+  const header = el("div", { 
+    id: "dashboard-header",
+    class: "dashboard-section dashboard-header card card-feature" 
+  },
     el("h2", { class: "text-2xl font-bold mb-2" }, "Panel de dispositivos IoT"),
     el("p", { class: "muted text-lg" }, `Proyecto actual: ${currentProject ?? "—"}`)
   );
 
   // Widget de estado general con indicadores LED
   const generalStatus = await generalStatusWidget();
+  if (generalStatus) {
+    generalStatus.id = "dashboard-general-status";
+    generalStatus.classList.add("dashboard-section", "dashboard-general-status");
+  }
 
-    // Widget de estado del sistema (gateways, endpoints, sensores)
-    const systemStatus = await systemStatusWidget();
+  // Widget de estado del sistema (gateways, endpoints, sensores)
+  const systemStatus = await systemStatusWidget();
+  if (systemStatus) {
+    systemStatus.id = "dashboard-system-status";
+    systemStatus.classList.add("dashboard-section", "dashboard-system-status");
+  }
 
-    // Widget de estructura jerárquica Gateway → Endpoints → Sensores
-    const hierarchyWidget = createHierarchyWidget();
+  // Widget de estructura jerárquica Gateway → Endpoints → Sensores
+  const hierarchyWidget = createHierarchyWidget();
+  hierarchyWidget.id = "dashboard-hierarchy";
+  hierarchyWidget.classList.add("dashboard-section", "dashboard-hierarchy");
 
-    // Widget de logs MQTT en tiempo real
-    const mqttLogs = mqttLogsWidget();
+  // Widget de logs MQTT en tiempo real
+  const mqttLogs = mqttLogsWidget();
+  if (mqttLogs) {
+    mqttLogs.id = "dashboard-mqtt-logs";
+    mqttLogs.classList.add("dashboard-section", "dashboard-mqtt-logs");
+  }
 
-    // Widget de alertas activas
-    const alertsWidget = alertWidget();
+  // Widget de alertas activas
+  const alertsWidget = alertWidget();
+  if (alertsWidget) {
+    alertsWidget.id = "dashboard-alerts";
+    alertsWidget.classList.add("dashboard-section", "dashboard-alerts");
+  }
 
-    // Selector de dispositivos
-    const deviceSelector = await deviceSelectorWidget();
+  // Selector de dispositivos
+  const deviceSelector = await deviceSelectorWidget();
+  if (deviceSelector) {
+    deviceSelector.id = "dashboard-device-selector";
+    deviceSelector.classList.add("dashboard-section", "dashboard-device-selector");
+  }
   
   // Información del dispositivo seleccionado (solo se muestra si hay un dispositivo seleccionado)
   const deviceInfo = selectedDevice ? selectedDeviceInfoWidget() : null;
+  if (deviceInfo) {
+    deviceInfo.id = "dashboard-device-info";
+    deviceInfo.classList.add("dashboard-section", "dashboard-device-info");
+  }
 
   // Visualización SVG del dispositivo (solo se muestra si hay un dispositivo seleccionado)
   const deviceVisualization = selectedDevice ? await deviceVisualizationWidget(selectedDevice) : null;
+  if (deviceVisualization) {
+    deviceVisualization.id = "dashboard-device-visualization";
+    deviceVisualization.classList.add("dashboard-section", "dashboard-device-visualization");
+  }
 
   // Contenedor para datos específicos del dispositivo
   const deviceDataContainer = el("div", {
     id: "device-data-container",
-    style: "margin-top: 20px;"
+    class: "dashboard-section dashboard-device-data",
+    style: "display: none; margin-top: 0;"
   });
 
   // Función para cargar datos de un sensor específico
@@ -472,7 +565,15 @@ export async function render() {
     }
 
     // Crear gráfico para el dispositivo
-    const temperatureChart = await updateTemperatureChart(device);
+    let temperatureChart = null;
+    try {
+      temperatureChart = await updateTemperatureChart(device);
+      if (!temperatureChart) {
+        console.warn('[Dashboard] updateTemperatureChart retornó null para:', device.id_dispositivo);
+      }
+    } catch (error) {
+      console.error('[Dashboard] Error creando gráfico de temperatura:', error);
+    }
 
     // Gráfico demo original (mantenido para compatibilidad)
     const rtChart = await chartWidget({ 
@@ -521,26 +622,68 @@ export async function render() {
       )
     );
 
-    deviceSpecificCards = el("div", {},
-      temperatureChart || el("div", { class: "card" }, "Cargando gráfico..."),
+    deviceSpecificCards = el("div", {
+      style: "display: flex; flex-direction: column; gap: var(--espaciado-lg); width: 100%;"
+    },
+      temperatureChart || el("div", { 
+        class: "card",
+        style: "text-align: center; padding: 40px; color: #666;"
+      }, "⏳ Cargando gráfico..."),
       grids,
       actions
     );
+    
+    // Log para debugging
+    if (temperatureChart) {
+      console.log('[Dashboard] Gráfico de temperatura creado correctamente para:', device.id_dispositivo);
+    } else {
+      console.warn('[Dashboard] No se pudo crear el gráfico de temperatura para:', device.id_dispositivo);
+    }
   }
 
   // Event listener para cuando se selecciona un dispositivo
   deviceSelector.addEventListener('deviceSelected', async (e) => {
     const device = e.detail.device;
-    await loadDeviceData(device);
     
-    // Reconstruir las cards del dispositivo (incluye el gráfico)
-    await rebuildDeviceSpecificCards(device);
+    // Mostrar contenedores al seleccionar dispositivo
+    deviceDataContainer.style.display = "block";
+    deviceCardsContainer.style.display = "block";
     
-    // Actualizar el DOM con las nuevas cards
-    const container = document.querySelector('[data-device-cards-container]');
-    if (container && deviceSpecificCards) {
-      container.innerHTML = '';
-      container.appendChild(deviceSpecificCards);
+    // Mostrar indicador de carga
+    deviceDataContainer.innerHTML = "";
+    deviceDataContainer.appendChild(el("div", {
+      style: "text-align: center; padding: 20px; color: #666;"
+    }, "Cargando datos del dispositivo..."));
+    
+    deviceCardsContainer.innerHTML = "";
+    deviceCardsContainer.appendChild(el("div", {
+      style: "text-align: center; padding: 20px; color: #666;"
+    }, "Cargando gráfico..."));
+    
+    try {
+      await loadDeviceData(device);
+      
+      // Reconstruir las cards del dispositivo (incluye el gráfico)
+      await rebuildDeviceSpecificCards(device);
+      
+      // Actualizar el DOM con las nuevas cards
+      if (deviceSpecificCards) {
+        deviceCardsContainer.innerHTML = '';
+        deviceCardsContainer.appendChild(deviceSpecificCards);
+      }
+    } catch (error) {
+      console.error('[Dashboard] Error al cargar dispositivo:', error);
+      deviceDataContainer.innerHTML = "";
+      deviceDataContainer.appendChild(el("div", {
+        class: "card",
+        style: "text-align: center; color: #d32f2f; padding: 20px;"
+      }, "Error al cargar datos del dispositivo"));
+      
+      deviceCardsContainer.innerHTML = "";
+      deviceCardsContainer.appendChild(el("div", {
+        class: "card",
+        style: "text-align: center; color: #d32f2f; padding: 20px;"
+      }, "Error al cargar gráfico"));
     }
   });
 
@@ -576,38 +719,146 @@ export async function render() {
   }
   
   // Limpieza cuando se navega fuera de la página
-  const cleanup = () => {
+  const cleanupConfig = () => {
     if (configUnsubscribe) {
       configUnsubscribe();
     }
   };
   
   // Escuchar evento de navegación para limpiar
-  window.addEventListener('beforeunload', cleanup);
+  window.addEventListener('beforeunload', cleanupConfig);
 
 
   // Contenedor para las cards específicas del dispositivo
   const deviceCardsContainer = el("div", {
-    "data-device-cards-container": true
+    "data-device-cards-container": true,
+    class: "dashboard-section dashboard-device-cards",
+    style: "display: none;"
   });
   
   if (deviceSpecificCards) {
     deviceCardsContainer.appendChild(deviceSpecificCards);
+    deviceCardsContainer.style.display = "block";
+    deviceDataContainer.style.display = "block";
   }
 
-  return el("div", {}, 
-    header, 
-    generalStatus,
-    systemStatus,
-    hierarchyWidget,
-    alertsWidget,
-    deviceSelector, 
-    deviceInfo, 
-    deviceVisualization,
+  // Crear contenedor principal con layout vertical (mqtt logs al final)
+  // Pares de elementos lado a lado para optimizar espacio
+  const dashboardContainer = el("div", { class: "dashboard-container" },
+    header,
+    // Fila 1: Estado General y Estado del Sistema
+    el("div", { class: "dashboard-row" },
+      generalStatus,
+      systemStatus
+    ),
+    // Fila 2: Alertas y Jerarquía
+    el("div", { class: "dashboard-row" },
+      alertsWidget,
+      hierarchyWidget
+    ),
+    // Selector de dispositivos (ancho completo)
+    deviceSelector,
+    // Fila 3: Info del dispositivo y Visualización (solo si hay dispositivo seleccionado)
+    ...(selectedDevice && deviceInfo && deviceVisualization ? [
+      el("div", { class: "dashboard-row" },
+        deviceInfo,
+        deviceVisualization
+      )
+    ] : []),
+    // Datos del dispositivo (siempre presente, oculto si no hay dispositivo)
     deviceDataContainer,
+    // Cards específicas del dispositivo (siempre presente, oculto si no hay dispositivo)
     deviceCardsContainer,
+    // Logs MQTT al final (ancho completo)
     mqttLogs
   );
+
+  // Inicializar navegación activa y scroll (sin script inline)
+  // Limpiar handlers anteriores si existen
+  if (window.__dashboardNavScrollHandler) {
+    window.removeEventListener('scroll', window.__dashboardNavScrollHandler);
+    window.__dashboardNavScrollHandler = null;
+  }
+  
+  // Configurar navegación después de que el DOM esté listo
+  setTimeout(() => {
+    const navLinks = document.querySelectorAll('.dashboard-nav-menu a[data-section]');
+    const sections = document.querySelectorAll('.dashboard-section');
+    
+    // Función para actualizar link activo
+    function updateActiveLink() {
+      const scrollPos = window.scrollY + 100;
+      
+      sections.forEach((section) => {
+        const top = section.offsetTop;
+        const bottom = top + section.offsetHeight;
+        
+        if (scrollPos >= top && scrollPos < bottom) {
+          navLinks.forEach(link => link.classList.remove('active'));
+          const sectionId = section.id ? section.id.replace('dashboard-', '') : '';
+          const activeLink = document.querySelector(`[data-section="${sectionId}"]`);
+          if (activeLink) {
+            activeLink.classList.add('active');
+          }
+        }
+      });
+    }
+    
+    // Event listeners para navegación
+    navLinks.forEach(link => {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href');
+        const target = document.querySelector(targetId);
+        if (target) {
+          const navMenu = document.querySelector('.dashboard-nav-menu');
+          const navbar = document.querySelector('.navbar');
+          const offsetTop = target.offsetTop - (navMenu ? navMenu.offsetHeight : 0) - (navbar ? navbar.offsetHeight : 0);
+          window.scrollTo({
+            top: offsetTop,
+            behavior: 'smooth'
+          });
+          
+          // Cerrar menú móvil si está abierto
+          if (navMenu && navMenu.classList.contains('mobile-menu')) {
+            const overlay = document.getElementById('dashboard-nav-overlay');
+            navMenu.classList.remove('mobile-menu', 'active');
+            if (overlay) overlay.classList.remove('active');
+            const toggleBtn = document.getElementById('dashboard-nav-toggle');
+            if (toggleBtn) toggleBtn.textContent = '☰';
+          }
+        }
+      });
+    });
+    
+    // Configurar scroll handler
+    window.__dashboardNavScrollHandler = updateActiveLink;
+    window.addEventListener('scroll', updateActiveLink);
+    updateActiveLink(); // Inicial
+  }, 100);
+
+  const pageContainer = el("div", {},
+    dashboardNav,
+    dashboardContainer
+  );
+  
+  // Limpieza cuando se navega fuera
+  const cleanupDashboard = () => {
+    // Limpiar config unsubscribe
+    if (configUnsubscribe) {
+      configUnsubscribe();
+    }
+    // Limpiar scroll handler
+    if (window.__dashboardNavScrollHandler) {
+      window.removeEventListener('scroll', window.__dashboardNavScrollHandler);
+      window.__dashboardNavScrollHandler = null;
+    }
+  };
+  
+  // Retornar el contenedor con función de limpieza
+  pageContainer.cleanup = cleanupDashboard;
+  
+  return pageContainer;
 }
 
 // ==========================

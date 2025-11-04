@@ -5,7 +5,7 @@
 import { el } from "../utils/dom.js";
 import { getState } from "../state/store.js";
 import { ROLES_CONST } from "../state/store.js";
-import { ConfigAPI } from "../api.js";
+import { ConfigAPI, invalidateCache } from "../api.js";
 import { configService } from "../utils/configService.js";
 
 export async function render() {
@@ -152,6 +152,9 @@ export async function render() {
         alert("Configuración guardada exitosamente para tu perfil");
         console.log("Configuración de visualización actualizada (por perfil):", config);
         
+        // Invalidar cache de configuración general en la API
+        invalidateCache("/config/general", "GET");
+        
         // Disparar evento personalizado para que otros componentes se actualicen
         window.dispatchEvent(new CustomEvent('visualizationConfigChanged', { detail: config }));
       } else {
@@ -236,7 +239,35 @@ export async function render() {
   loadSystemInfo();
 
   // Cargar configuración cuando se monta el componente
-  setTimeout(loadExistingConfig, 100);
+  let loadConfigTimeout = setTimeout(loadExistingConfig, 100);
+
+  // Limpieza al salir de la página
+  const cleanup = () => {
+    // Limpiar timeout
+    if (loadConfigTimeout) {
+      clearTimeout(loadConfigTimeout);
+      loadConfigTimeout = null;
+    }
+    
+    // Limpiar funciones globales
+    delete window.saveVisualizationConfig;
+    delete window.testNotifications;
+    
+    // Limpiar cache de configuración (solo cache en memoria, mantiene localStorage)
+    configService.clearCache();
+    
+    console.log('[Configuración] Limpieza completada');
+  };
+
+  // Escuchar evento de navegación para limpiar
+  const navigationHandler = () => {
+    cleanup();
+    window.removeEventListener('hashchange', navigationHandler);
+    window.removeEventListener('beforeunload', cleanup);
+  };
+
+  window.addEventListener('hashchange', navigationHandler);
+  window.addEventListener('beforeunload', cleanup);
 
   return el("div", { class: "config-container" },
     el("div", { class: "config-header" },
