@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "author": "GA04",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-v1", "id": "esp", "top": -8, "left": 6, "attrs": {} }
+  ],
+  "connections": []
+}
+

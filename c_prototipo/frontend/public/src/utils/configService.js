@@ -185,7 +185,7 @@ class ConfigService {
   }
 
   async setAdvancesConfig(config) {
-    // Guardar localmente
+    // Guardar localmente (esto dispara emitChange automáticamente)
     const localSuccess = this.set(CONFIG_KEYS.ADVANCED, config);
     
     // Si el usuario es admin, sincronizar con servidor
@@ -196,6 +196,9 @@ class ConfigService {
       console.warn("No se pudo sincronizar configuración avanzada:", error);
       // La configuración local se mantiene aunque falle la sincronización
     }
+    
+    // Disparar evento personalizado para componentes que no usan onConfigChange
+    window.dispatchEvent(new CustomEvent('advancedConfigChanged', { detail: config }));
     
     return localSuccess;
   }
@@ -291,6 +294,40 @@ class ConfigService {
       return true;
     }
     return false;
+  }
+
+  // === Limpieza de cache ===
+  /**
+   * Limpia el cache en memoria (mantiene localStorage)
+   * Útil para liberar memoria cuando se cambia de página
+   */
+  clearCache() {
+    const cacheSize = this.cache.size;
+    this.cache.clear();
+    console.log(`[ConfigService] Cache limpiado: ${cacheSize} entradas removidas`);
+    return cacheSize;
+  }
+
+  /**
+   * Limpia listeners específicos de una clave
+   * @param {string} key - Clave de configuración
+   */
+  clearListeners(key) {
+    if (this.listeners.has(key)) {
+      this.listeners.delete(key);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Limpia todos los listeners
+   */
+  clearAllListeners() {
+    const listenersCount = this.listeners.size;
+    this.listeners.clear();
+    console.log(`[ConfigService] Listeners limpiados: ${listenersCount} sets removidos`);
+    return listenersCount;
   }
 
   // === Estado ===

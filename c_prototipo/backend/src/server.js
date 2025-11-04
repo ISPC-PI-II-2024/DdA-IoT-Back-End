@@ -19,6 +19,7 @@ import { initWebSocket } from "./sw/index.js";
 import { mqttService } from "./service/mqtt.service.js";
 import CO2Routes from "./routes/CO2.routes.js";
 import gatewayRoutes from "./routes/gateway.routes.js";
+import userRoutes from "./routes/user.routes.js";
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api", temperatureRoutes);
 app.use("/api", dataRoutes);
 app.use("/api", CO2Routes);
 app.use("/api", gatewayRoutes);
+app.use("/api", userRoutes);
 
 // HTTP server + WS
 const server = createServer(app);

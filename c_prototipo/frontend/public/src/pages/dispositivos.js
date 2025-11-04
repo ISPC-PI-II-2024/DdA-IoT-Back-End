@@ -74,34 +74,93 @@ export async function render() {
     return [];
   }
 
+  // Sistema de batching para consultas de histórico
+  const historyBatchQueue = new Map(); // deviceId -> {resolve, reject, containerNode}
+  let historyBatchTimer = null;
+  const HISTORY_BATCH_DELAY = 500; // 500ms para agrupar consultas
+  const HISTORY_BATCH_SIZE = 5; // Máximo 5 dispositivos por batch
+  
+  // Función para procesar batch de históricos
+  async function processHistoryBatch() {
+    if (historyBatchQueue.size === 0) return;
+    
+    const devicesToProcess = Array.from(historyBatchQueue.entries()).slice(0, HISTORY_BATCH_SIZE);
+    historyBatchQueue.clear();
+    
+    // Procesar en paralelo con limitación
+    const promises = devicesToProcess.map(async ([deviceId, {resolve, reject, containerNode}]) => {
+      try {
+        await renderHistoryForDevice(deviceId, containerNode);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+    
+    await Promise.allSettled(promises);
+    
+    // Si quedan más en la cola, programar siguiente batch
+    if (historyBatchQueue.size > 0) {
+      historyBatchTimer = setTimeout(processHistoryBatch, HISTORY_BATCH_DELAY);
+    }
+  }
+  
+  // Función para agregar consulta de histórico al batch
+  function queueHistoryRequest(deviceId, containerNode) {
+    return new Promise((resolve, reject) => {
+      // Si ya está en la cola para este dispositivo, actualizar
+      if (historyBatchQueue.has(deviceId)) {
+        const existing = historyBatchQueue.get(deviceId);
+        existing.containerNode = containerNode;
+        existing.resolve = resolve;
+        existing.reject = reject;
+      } else {
+        historyBatchQueue.set(deviceId, {resolve, reject, containerNode});
+      }
+      
+      // Programar procesamiento del batch
+      if (historyBatchTimer) {
+        clearTimeout(historyBatchTimer);
+      }
+      
+      // Si la cola está llena, procesar inmediatamente
+      if (historyBatchQueue.size >= HISTORY_BATCH_SIZE) {
+        processHistoryBatch();
+      } else {
+        // Si no, esperar el delay para agrupar más consultas
+        historyBatchTimer = setTimeout(processHistoryBatch, HISTORY_BATCH_DELAY);
+      }
+    });
+  }
+
   // Cargar histórico para un dispositivo (MariaDB + InfluxDB)
   async function renderHistoryForDevice(deviceId, containerNode) {
     try {
       // Contenedor de histórico
       let history = containerNode.querySelector?.('.device-history');
       if (!history) {
-        history = el('div', { class: 'device-history', style: 'margin-top:10px; background:#fff; border:1px solid #eee; border-radius:6px; padding:10px;' });
+        history = el('div', { class: 'device-history', style: 'margin-top:6px; background:#fff; border:1px solid #eee; border-radius:4px; padding:6px;' });
         containerNode.appendChild(history);
       }
-      history.innerHTML = '<div style="text-align:center; padding:10px; color:#666;">Cargando histórico...</div>';
+      history.innerHTML = '<div style="text-align:center; padding:6px; color:#666; font-size:0.9em;">Cargando histórico...</div>';
 
-      // Cargar datos de sensores desde MariaDB
+      // Cargar datos de sensores desde MariaDB (con cache)
       const mdb = await DevicesAPI.getDeviceSensorData(deviceId, 20).catch(() => ({ success:false, data:[] }));
       const rows = (mdb && mdb.success && Array.isArray(mdb.data)) ? mdb.data : [];
 
-      // Cargar datos históricos desde InfluxDB
+      // Cargar datos históricos desde InfluxDB (con cache)
       const influxData = await DevicesAPI.getHistoricalData(deviceId, 50, "24h").catch(() => ({ success:false, data:[] }));
       const influxRows = (influxData && influxData.success && Array.isArray(influxData.data)) ? influxData.data : [];
 
       history.innerHTML = '';
 
       // Tab de selección (MariaDB vs InfluxDB)
-      const tabs = el('div', { style: 'display:flex; gap:8px; margin-bottom:10px; border-bottom:2px solid #e0e0e0;' });
+      const tabs = el('div', { style: 'display:flex; gap:6px; margin-bottom:6px; border-bottom:2px solid #e0e0e0; padding-bottom:4px;' });
       let activeTab = 'mariadb';
       
       const mariadbTab = el('button', {
         class: 'btn btn-sm',
-        style: `padding: 8px 16px; border: none; border-bottom: 2px solid ${activeTab === 'mariadb' ? '#2196F3' : 'transparent'}; background: none; cursor: pointer; color: ${activeTab === 'mariadb' ? '#2196F3' : '#666'}; font-weight: ${activeTab === 'mariadb' ? 'bold' : 'normal'};`,
+        style: `padding: 4px 12px; border: none; border-bottom: 2px solid ${activeTab === 'mariadb' ? '#2196F3' : 'transparent'}; background: none; cursor: pointer; color: ${activeTab === 'mariadb' ? '#2196F3' : '#666'}; font-weight: ${activeTab === 'mariadb' ? 'bold' : 'normal'}; font-size:0.85em;`,
         onclick: () => {
           activeTab = 'mariadb';
           mariadbTab.style.color = '#2196F3';
@@ -116,7 +175,7 @@ export async function render() {
       
       const influxdbTab = el('button', {
         class: 'btn btn-sm',
-        style: `padding: 8px 16px; border: none; border-bottom: 2px solid ${activeTab === 'influxdb' ? '#9C27B0' : 'transparent'}; background: none; cursor: pointer; color: ${activeTab === 'influxdb' ? '#9C27B0' : '#666'}; font-weight: ${activeTab === 'influxdb' ? 'bold' : 'normal'};`,
+        style: `padding: 4px 12px; border: none; border-bottom: 2px solid ${activeTab === 'influxdb' ? '#9C27B0' : 'transparent'}; background: none; cursor: pointer; color: ${activeTab === 'influxdb' ? '#9C27B0' : '#666'}; font-weight: ${activeTab === 'influxdb' ? 'bold' : 'normal'}; font-size:0.85em;`,
         onclick: () => {
           activeTab = 'influxdb';
           influxdbTab.style.color = '#9C27B0';
@@ -137,51 +196,132 @@ export async function render() {
 
       // Contenido MariaDB
       const mariadbContent = rows.length > 0 ? el('div', { class: 'tab-content-item', style: 'display:none;' },
-        el('div', { style: 'margin-bottom:8px; font-size:12px; color:#666;' }, `📊 Últimos ${rows.length} registros de sensores`),
-        el('div', { style: 'overflow-x:auto; max-height:300px;' },
-          el('table', { style: 'width:100%; border-collapse:collapse; font-size:0.85em;' },
+        el('div', { style: 'margin-bottom:4px; font-size:11px; color:#666;' }, `📊 Últimos ${rows.length} registros de sensores`),
+        el('div', { style: 'overflow-x:auto; max-height:350px;' },
+          el('table', { style: 'width:100%; border-collapse:collapse; font-size:0.8em;' },
             el('thead', { style: 'position:sticky; top:0; background:#f9f9f9; z-index:1;' },
               el('tr', {},
-                el('th', { style: 'padding:8px; border:1px solid #ddd; text-align:left;' }, 'Tipo Sensor'),
-                el('th', { style: 'padding:8px; border:1px solid #ddd; text-align:left;' }, 'Valor'),
-                el('th', { style: 'padding:8px; border:1px solid #ddd; text-align:left;' }, 'Unidad'),
-                el('th', { style: 'padding:8px; border:1px solid #ddd; text-align:left;' }, 'Timestamp')
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Tipo Sensor'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Valor'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Unidad'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Timestamp')
               )
             ),
             el('tbody', {},
-              ...rows.map(r => el('tr', {},
-                el('td', { style: 'padding:6px; border:1px solid #f0f0f0;' }, r.tipo_sensor || '—'),
-                el('td', { style: 'padding:6px; border:1px solid #f0f0f0;' }, String(r.valor ?? '—')),
-                el('td', { style: 'padding:6px; border:1px solid #f0f0f0;' }, r.unidad || '—'),
-                el('td', { style: 'padding:6px; border:1px solid #f0f0f0;' }, r.timestamp ? new Date(r.timestamp).toLocaleString() : '—')
+              ...rows.map((r, idx) => el('tr', { style: `background:${idx % 2 === 0 ? '#fff' : '#fafafa'};` },
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0;' }, r.tipo_sensor || '—'),
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0;' }, String(r.valor ?? '—')),
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0;' }, r.unidad || '—'),
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; font-size:0.9em;' }, r.timestamp ? new Date(r.timestamp).toLocaleString() : '—')
               ))
             )
           )
         )
-      ) : el('div', { class: 'tab-content-item', style: 'display:none; text-align:center; padding:20px; color:#999;' }, 'No hay datos históricos en MariaDB');
+      ) : el('div', { class: 'tab-content-item', style: 'display:none; text-align:center; padding:15px; color:#999; font-size:0.9em;' }, 'No hay datos históricos en MariaDB');
 
-      // Contenido InfluxDB
+      // Función para parsear datos de InfluxDB (endpoints_X_sensores_Y_humedad, etc.)
+      function parseInfluxData(row) {
+        const parsed = {
+          timestamp: row.timestamp ? new Date(row.timestamp).toLocaleString() : '—',
+          topic: row.topic || '—',
+          sensors: []
+        };
+        
+        // Extraer datos de sensores del formato endpoints_X_sensores_Y_propiedad
+        const sensorMap = new Map();
+        
+        Object.keys(row).forEach(key => {
+          if (['timestamp', 'topic', 'host'].includes(key)) return;
+          
+          // Patrón: endpoints_X_sensores_Y_propiedad
+          const match = key.match(/^endpoints_(\d+)_sensores_(\d+)_(.+)$/);
+          if (match) {
+            const [, endpointIdx, sensorIdx, property] = match;
+            const sensorKey = `E${endpointIdx}S${sensorIdx}`;
+            
+            if (!sensorMap.has(sensorKey)) {
+              sensorMap.set(sensorKey, {
+                endpoint: parseInt(endpointIdx),
+                sensor: parseInt(sensorIdx),
+                id: `${endpointIdx}-${sensorIdx}`
+              });
+            }
+            
+            const sensor = sensorMap.get(sensorKey);
+            if (property === 'temp' || property === 'temperatura') {
+              sensor.temp = row[key];
+            } else if (property === 'humedad' || property === 'humidity') {
+              sensor.humedad = row[key];
+            } else if (property === 'posicion' || property === 'position') {
+              sensor.posicion = row[key];
+            } else {
+              sensor[property] = row[key];
+            }
+          }
+        });
+        
+        parsed.sensors = Array.from(sensorMap.values()).sort((a, b) => {
+          if (a.endpoint !== b.endpoint) return a.endpoint - b.endpoint;
+          return a.sensor - b.sensor;
+        });
+        
+        return parsed;
+      }
+
+      // Contenido InfluxDB - Tabla mejorada con columnas legibles
       const influxdbContent = influxRows.length > 0 ? el('div', { class: 'tab-content-item', style: 'display:none;' },
-        el('div', { style: 'margin-bottom:8px; font-size:12px; color:#666;' }, `⚡ Últimos ${influxRows.length} mensajes MQTT (últimas 24h)`),
-        el('div', { style: 'overflow-x:auto; max-height:300px;' },
-          el('table', { style: 'width:100%; border-collapse:collapse; font-size:0.85em;' },
+        el('div', { style: 'margin-bottom:6px; font-size:11px; color:#666;' }, `⚡ Últimos ${influxRows.length} mensajes InfluxDB (últimas 24h)`),
+        el('div', { style: 'overflow-x:auto; max-height:400px;' },
+          el('table', { style: 'width:100%; border-collapse:collapse; font-size:0.8em;' },
             el('thead', { style: 'position:sticky; top:0; background:#f9f9f9; z-index:1;' },
               el('tr', {},
-                el('th', { style: 'padding:8px; border:1px solid #ddd; text-align:left;' }, 'Timestamp'),
-                el('th', { style: 'padding:8px; border:1px solid #ddd; text-align:left;' }, 'Tópico'),
-                el('th', { style: 'padding:8px; border:1px solid #ddd; text-align:left;' }, 'Datos')
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Timestamp'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Tópico'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Endpoint'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Sensor'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Posición'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Temp (°C)'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Humedad (%)')
               )
             ),
             el('tbody', {},
-              ...influxRows.map(r => el('tr', {},
-                el('td', { style: 'padding:6px; border:1px solid #f0f0f0;' }, r.timestamp ? new Date(r.timestamp).toLocaleString() : '—'),
-                el('td', { style: 'padding:6px; border:1px solid #f0f0f0;' }, r.topic || '—'),
-                el('td', { style: 'padding:6px; border:1px solid #f0f0f0; max-width:300px; overflow:hidden; text-overflow:ellipsis;' }, JSON.stringify(Object.keys(r).filter(k => !['timestamp', 'topic', 'host'].includes(k)).reduce((obj, k) => { obj[k] = r[k]; return obj; }, {})).substring(0, 100) + '...')
-              ))
+              ...influxRows.flatMap(r => {
+                const parsed = parseInfluxData(r);
+                if (parsed.sensors.length === 0) {
+                  // Si no hay sensores parseados, mostrar fila simple
+                  return [el('tr', { style: 'background:#fff;' },
+                    el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0;' }, parsed.timestamp),
+                    el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0;' }, parsed.topic),
+                    el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; text-align:center;', colSpan: 5 }, 'Sin datos de sensores estructurados')
+                  )];
+                }
+                // Una fila por sensor
+                return parsed.sensors.map((sensor, idx) => el('tr', { 
+                  style: `background:${idx % 2 === 0 ? '#fff' : '#fafafa'};` 
+                },
+                  idx === 0 ? el('td', { 
+                    style: 'padding:4px 6px; border:1px solid #f0f0f0;', 
+                    rowSpan: parsed.sensors.length 
+                  }, parsed.timestamp) : null,
+                  idx === 0 ? el('td', { 
+                    style: 'padding:4px 6px; border:1px solid #f0f0f0;', 
+                    rowSpan: parsed.sensors.length 
+                  }, parsed.topic) : null,
+                  el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:500;' }, `E${sensor.endpoint}`),
+                  el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:500;' }, `S${sensor.sensor}`),
+                  el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; text-align:center;' }, sensor.posicion !== undefined ? sensor.posicion : '—'),
+                  el('td', { 
+                    style: `padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:600; color:${sensor.temp && (sensor.temp < 15 || sensor.temp > 30) ? '#d32f2f' : '#4CAF50'};` 
+                  }, sensor.temp !== undefined ? `${sensor.temp.toFixed(1)}°C` : '—'),
+                  el('td', { 
+                    style: `padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:600; color:${sensor.humedad && (sensor.humedad < 30 || sensor.humedad > 80) ? '#d32f2f' : '#4CAF50'};` 
+                  }, sensor.humedad !== undefined ? `${sensor.humedad.toFixed(1)}%` : '—')
+                ));
+              })
             )
           )
         )
-      ) : el('div', { class: 'tab-content-item', style: 'display:none; text-align:center; padding:20px; color:#999;' }, 'No hay datos históricos en InfluxDB');
+      ) : el('div', { class: 'tab-content-item', style: 'display:none; text-align:center; padding:15px; color:#999; font-size:0.9em;' }, 'No hay datos históricos en InfluxDB');
 
       tabContent.appendChild(mariadbContent);
       tabContent.appendChild(influxdbContent);
@@ -218,6 +358,10 @@ export async function render() {
     el("p", { class: "muted text-lg" }, "Monitoreo completo del estado de todos los dispositivos IoT del sistema")
   );
 
+  // Trackear sensores huérfanos ya advertidos (evitar warnings repetitivos)
+  const orphanedSensors = new Set();
+  const orphanedEndpoints = new Set();
+  
   // Función para organizar dispositivos jerárquicamente
   // Estructura: Gateway → Endpoints → Sensores
   function organizeDevicesHierarchy(devices) {
@@ -225,14 +369,17 @@ export async function render() {
     const endpointsByGateway = {};
     const sensorsByEndpoint = {};
     
-    console.log('[DISPOSITIVOS] Organizando', devices.length, 'dispositivos en jerarquía');
+    // Solo log detallado en primera carga o cambios significativos
+    const isFirstLoad = orphanedSensors.size === 0 && orphanedEndpoints.size === 0;
     
     // Paso 1: Identificar y ordenar gateways
     devices.forEach(device => {
       if (device.tipo === 'gateway') {
         gateways.push(device);
         endpointsByGateway[device.id_dispositivo] = [];
-        console.log('[DISPOSITIVOS] ✅ Gateway:', device.id_dispositivo);
+        if (isFirstLoad) {
+          console.log('[DISPOSITIVOS] ✅ Gateway:', device.id_dispositivo);
+        }
       }
     });
     
@@ -245,9 +392,15 @@ export async function render() {
           endpointsByGateway[gatewayId].push(device);
           // Inicializar array de sensores para este endpoint
           sensorsByEndpoint[device.id_dispositivo] = [];
-          console.log('[DISPOSITIVOS]   └─ Endpoint:', device.id_dispositivo, '→ Gateway:', gatewayId);
+          if (isFirstLoad) {
+            console.log('[DISPOSITIVOS]   └─ Endpoint:', device.id_dispositivo, '→ Gateway:', gatewayId);
+          }
         } else {
-          console.warn('[DISPOSITIVOS] ⚠️ Endpoint sin gateway válido:', device.id_dispositivo, '→ gateway_id:', gatewayId);
+          // Solo advertir la primera vez que se detecta este endpoint huérfano
+          if (!orphanedEndpoints.has(device.id_dispositivo)) {
+            console.warn('[DISPOSITIVOS] ⚠️ Endpoint sin gateway válido:', device.id_dispositivo, '→ gateway_id:', gatewayId);
+            orphanedEndpoints.add(device.id_dispositivo);
+          }
           // Crear entrada para endpoints huérfanos
           if (!endpointsByGateway['_orphan']) {
             endpointsByGateway['_orphan'] = [];
@@ -268,9 +421,15 @@ export async function render() {
             sensorsByEndpoint[endpointId] = [];
           }
           sensorsByEndpoint[endpointId].push(device);
-          console.log('[DISPOSITIVOS]     └─ Sensor:', device.id_dispositivo, '→ Endpoint:', endpointId);
+          if (isFirstLoad) {
+            console.log('[DISPOSITIVOS]     └─ Sensor:', device.id_dispositivo, '→ Endpoint:', endpointId);
+          }
         } else {
-          console.warn('[DISPOSITIVOS] ⚠️ Sensor sin endpoint válido:', device.id_dispositivo);
+          // Solo advertir la primera vez que se detecta este sensor huérfano
+          if (!orphanedSensors.has(device.id_dispositivo)) {
+            console.warn('[DISPOSITIVOS] ⚠️ Sensor sin endpoint válido:', device.id_dispositivo);
+            orphanedSensors.add(device.id_dispositivo);
+          }
           // Crear entrada para sensores huérfanos
           if (!sensorsByEndpoint['_orphan']) {
             sensorsByEndpoint['_orphan'] = [];
@@ -280,18 +439,20 @@ export async function render() {
       }
     });
     
-    // Estadísticas de la jerarquía
+    // Estadísticas de la jerarquía (solo log en primera carga o cambios)
     const totalEndpoints = Object.values(endpointsByGateway).flat().length;
     const totalSensors = Object.values(sensorsByEndpoint).flat().length;
     
-    console.log('[DISPOSITIVOS] 📊 Jerarquía organizada:', {
-      gateways: gateways.length,
-      totalEndpoints: totalEndpoints,
-      totalSensors: totalSensors,
-      endpointsPorGateway: Object.fromEntries(
-        Object.entries(endpointsByGateway).map(([gw, eps]) => [gw, eps.length])
-      )
-    });
+    if (isFirstLoad) {
+      console.log('[DISPOSITIVOS] 📊 Jerarquía organizada:', {
+        gateways: gateways.length,
+        totalEndpoints: totalEndpoints,
+        totalSensors: totalSensors,
+        endpointsPorGateway: Object.fromEntries(
+          Object.entries(endpointsByGateway).map(([gw, eps]) => [gw, eps.length])
+        )
+      });
+    }
     
     return { gateways, endpointsByGateway, sensorsByEndpoint };
   }
@@ -311,17 +472,30 @@ export async function render() {
     style: "margin-top: 20px;"
   });
 
+  // Debounce para evitar actualizaciones muy frecuentes
+  let updateDebounceTimer = null;
+  const UPDATE_DEBOUNCE_MS = 1000; // 1 segundo de debounce
+  
   // Función para actualizar la vista de dispositivos
-  async function updateDevicesView() {
-    devicesContainer.innerHTML = "";
-    
-    // Recargar dispositivos si es necesario (cada 10 minutos o manual)
-    const now = new Date();
-    const tenMinutesAgo = new Date(now.getTime() - 10 * 60000);
-    
-    if (!lastUpdate || lastUpdate < tenMinutesAgo) {
-      currentDevices = await loadDevicesFromDB();
+  async function updateDevicesView(forceRefresh = false) {
+    // Aplicar debounce si no es forzado
+    if (!forceRefresh && updateDebounceTimer) {
+      clearTimeout(updateDebounceTimer);
     }
+    
+    return new Promise((resolve) => {
+      updateDebounceTimer = setTimeout(async () => {
+        devicesContainer.innerHTML = "";
+        
+        // Recargar dispositivos si es necesario (cada 45 segundos o manual)
+        // Considerando que las lecturas se reciben cada 30+ segundos
+        const now = new Date();
+        const refreshInterval = 45 * 1000; // 45 segundos
+        const lastRefreshTime = lastUpdate ? now.getTime() - lastUpdate.getTime() : refreshInterval + 1;
+        
+        if (forceRefresh || !lastUpdate || lastRefreshTime >= refreshInterval) {
+          currentDevices = await loadDevicesFromDB();
+        }
     
     // Verificar si hay dispositivos
     let validDevices = Array.isArray(currentDevices) && currentDevices.length > 0 ? currentDevices : [];
@@ -449,10 +623,10 @@ export async function render() {
           // Card principal del Gateway
           const gatewayCard = el("div", { 
             class: "card gateway-card",
-            style: `border-left: 5px solid ${gatewayColor}; background: linear-gradient(to right, ${gatewayColor}08, transparent); margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);`
+            style: `border-left: 5px solid ${gatewayColor}; background: linear-gradient(to right, ${gatewayColor}08, transparent); margin-bottom: 15px; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);`
           },
             // Header del Gateway
-            el("div", { style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 2px solid #e8e8e8;" },
+            el("div", { style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 2px solid #e8e8e8;" },
               el("div", { style: "flex: 1;" },
                 el("div", { style: "display: flex; align-items: center; gap: 12px; margin-bottom: 8px;" },
                   el("span", { style: `width: 16px; height: 16px; border-radius: 50%; background-color: ${gatewayColor}; box-shadow: 0 0 10px ${gatewayColor}60; animation: pulse 2s infinite;` }),
@@ -461,16 +635,16 @@ export async function render() {
                     el("span", { style: "font-size: 0.7em; color: #666; font-weight: normal; margin-left: 8px;" }, gateway.nombre || '')
                   )
                 ),
-                el("div", { style: "display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px;" },
-                  el("p", { style: "margin: 0; color: #666; font-size: 0.9em; display: flex; align-items: center; gap: 6px;" },
+                el("div", { style: "display: flex; gap: 15px; flex-wrap: wrap; margin-top: 6px;" },
+                  el("p", { style: "margin: 0; color: #666; font-size: 0.85em; display: flex; align-items: center; gap: 4px;" },
                     el("span", {}, "📍"),
                     gateway.ubicacion || 'Sin ubicación'
                   ),
-                  el("p", { style: "margin: 0; color: #666; font-size: 0.9em; display: flex; align-items: center; gap: 6px;" },
+                  el("p", { style: "margin: 0; color: #666; font-size: 0.85em; display: flex; align-items: center; gap: 4px;" },
                     el("span", {}, "🔗"),
                     `${endpoints.length} endpoint${endpoints.length !== 1 ? 's' : ''}`
                   ),
-                  el("p", { style: "margin: 0; color: #666; font-size: 0.9em; display: flex; align-items: center; gap: 6px;" },
+                  el("p", { style: "margin: 0; color: #666; font-size: 0.85em; display: flex; align-items: center; gap: 4px;" },
                     el("span", {}, "📡"),
                     `${totalSensorsForGateway} sensor${totalSensorsForGateway !== 1 ? 'es' : ''}`
                   )
@@ -504,10 +678,10 @@ export async function render() {
               // Card del Endpoint
               const endpointCard = el("div", { 
                 class: "card endpoint-card",
-                style: `margin-bottom: 20px; padding: 18px; border-left: 4px solid ${endpointColor}; background: #fafafa; border-radius: 8px; position: relative; box-shadow: 0 1px 4px rgba(0,0,0,0.05);`
+                style: `margin-bottom: 12px; padding: 10px; border-left: 4px solid ${endpointColor}; background: #fafafa; border-radius: 6px; position: relative; box-shadow: 0 1px 4px rgba(0,0,0,0.05);`
               },
                 // Header del Endpoint
-                el("div", { style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e8e8e8;" },
+                el("div", { style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e8e8e8;" },
                   el("div", { style: "flex: 1;" },
                     el("div", { style: "display: flex; align-items: center; gap: 10px; margin-bottom: 6px;" },
                       // Línea horizontal conectora
@@ -539,13 +713,13 @@ export async function render() {
                 )
               );
 
-              // Botón para ver histórico del endpoint
+              // Botón para ver histórico del endpoint (usar batching)
               try {
                 endpointCard.appendChild(el('div', { style: 'margin-top: 8px; margin-left: 30px;' },
                   el('button', {
                     class: 'btn btn-sm',
                     style: 'background: #2196F3; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em;',
-                    onclick: async () => { await renderHistoryForDevice(endpoint.id_dispositivo, endpointCard); }
+                    onclick: async () => { await queueHistoryRequest(endpoint.id_dispositivo, endpointCard); }
                   }, '📈 Ver Histórico')
                 ));
               } catch {}
@@ -571,7 +745,7 @@ export async function render() {
                       
                       const sensorItem = el("div", {
                         class: "sensor-item",
-                        style: `padding: 12px 15px; margin-bottom: ${isLastSensor ? '0' : '8px'}; background: white; border-left: 3px solid ${sensorColor}; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative;`
+                        style: `padding: 8px 10px; margin-bottom: ${isLastSensor ? '0' : '6px'}; background: white; border-left: 3px solid ${sensorColor}; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative;`
                       },
                         // Línea horizontal conectora de sensor
                         el("div", { 
@@ -596,7 +770,7 @@ export async function render() {
                           el('button', { 
                             class: 'btn btn-xs', 
                             style: 'padding: 4px 10px; font-size: 0.75em;',
-                            onclick: async () => { await renderHistoryForDevice(sensor.id_dispositivo, sensorItem); } 
+                            onclick: async () => { await queueHistoryRequest(sensor.id_dispositivo, sensorItem); } 
                           }, '📈 Histórico')
                         )
                       );
@@ -666,6 +840,10 @@ export async function render() {
         el("div", {}, "Error cargando dispositivos: " + error.message)
       ));
     }
+    
+    resolve();
+      }, forceRefresh ? 0 : UPDATE_DEBOUNCE_MS);
+    });
   }
 
   // Botón de actualización
@@ -674,7 +852,8 @@ export async function render() {
     style: "margin-bottom: 20px;",
     onclick: async () => {
       currentDevices = await loadDevicesFromDB();
-      await updateDevicesView();
+      await updateDevicesView(true); // Forzar actualización
+      updateLastUpdateIndicator();
     }
   }, "🔄 Actualizar Vista");
 
@@ -695,31 +874,704 @@ export async function render() {
   // Actualizar indicador
   updateLastUpdateIndicator();
 
-  // Auto-refresh cada 10 minutos
+  // Auto-refresh cada 45 segundos (optimizado para lecturas cada 30+ segundos)
+  // Esto permite capturar nuevas lecturas sin saturar el servidor
   const autoRefreshInterval = setInterval(async () => {
-    currentDevices = await loadDevicesFromDB();
-    await updateDevicesView();
+    await updateDevicesView(false); // No forzar, usar debounce
     updateLastUpdateIndicator();
-  }, 10 * 60 * 1000); // 10 minutos
+  }, 45 * 1000); // 45 segundos
 
-  // Limpiar intervalo al salir
+  // Limpiar intervalos y timers al salir
   window.addEventListener('beforeunload', () => {
     clearInterval(autoRefreshInterval);
+    if (historyBatchTimer) {
+      clearTimeout(historyBatchTimer);
+    }
+    if (updateDebounceTimer) {
+      clearTimeout(updateDebounceTimer);
+    }
   });
 
-  // Construir la página
+  // Crear dashboard de InfluxDB (similar al de MQTT pero con datos históricos)
+  async function createInfluxDBDashboard() {
+    const dashboardContainer = el("div", { 
+      class: "card", 
+      style: "margin-top: 15px; margin-bottom: 15px; padding: 10px;" 
+    },
+      el("h3", { style: "margin-bottom: 10px; font-size: 1.1em; padding-bottom: 8px; border-bottom: 2px solid #9C27B0;" }, "📊 Dashboard InfluxDB - Datos Históricos"),
+      el("div", { id: "influx-dashboard-content", style: "min-height: 200px;" }, "Cargando datos de InfluxDB...")
+    );
+
+    // Cargar datos de InfluxDB para el dashboard
+    async function loadInfluxDashboard() {
+      try {
+        const content = dashboardContainer.querySelector('#influx-dashboard-content');
+        if (!content) return;
+
+        // Cargar datos de todos los dispositivos (última hora)
+        const now = new Date();
+        const oneHourAgo = new Date(now.getTime() - (60 * 60 * 1000));
+
+        // Obtener dispositivos
+        const devicesResponse = await DevicesAPI.getAllDevices();
+        if (!devicesResponse.success || !Array.isArray(devicesResponse.data)) {
+          content.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay dispositivos disponibles</div>';
+          return;
+        }
+
+        const devices = devicesResponse.data;
+        const sensors = devices.filter(d => d.tipo === 'sensor');
+        
+        if (sensors.length === 0) {
+          content.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay sensores disponibles</div>';
+          return;
+        }
+
+        // Cargar datos históricos de InfluxDB para cada sensor (última hora)
+        const dashboardData = [];
+        
+        for (const sensor of sensors.slice(0, 10)) { // Limitar a 10 sensores para no saturar
+          try {
+            const influxResponse = await DevicesAPI.getHistoricalData(
+              sensor.id_dispositivo, 
+              20, // Últimos 20 puntos
+              "1h" // Última hora
+            );
+            
+            if (influxResponse.success && Array.isArray(influxResponse.data) && influxResponse.data.length > 0) {
+              // Parsear datos del sensor
+              influxResponse.data.forEach(row => {
+                const parsed = parseInfluxSensorData(row, sensor.id_dispositivo);
+                if (parsed) {
+                  dashboardData.push(parsed);
+                }
+              });
+            }
+          } catch (err) {
+            console.warn(`Error cargando datos de InfluxDB para sensor ${sensor.id_dispositivo}:`, err);
+          }
+        }
+
+        // Ordenar por timestamp (más reciente primero)
+        dashboardData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Renderizar dashboard
+        if (dashboardData.length === 0) {
+          content.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay datos de InfluxDB disponibles en la última hora</div>';
+          return;
+        }
+
+        // Crear tabla de dashboard
+        const dashboardTable = el('div', { style: 'overflow-x:auto; max-height:400px;' },
+          el('table', { style: 'width:100%; border-collapse:collapse; font-size:0.8em;' },
+            el('thead', { style: 'position:sticky; top:0; background:#f9f9f9; z-index:1;' },
+              el('tr', {},
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Timestamp'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Endpoint'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Sensor'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Posición'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Temp (°C)'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em; background:#f0f0f0;' }, 'Humedad (%)'),
+                el('th', { style: 'padding:4px 6px; border:1px solid #ddd; text-align:left; font-size:0.85em; background:#f0f0f0;' }, 'Tópico')
+              )
+            ),
+            el('tbody', {},
+              ...dashboardData.slice(0, 50).map((item, idx) => el('tr', { 
+                style: `background:${idx % 2 === 0 ? '#fff' : '#fafafa'};` 
+              },
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; font-size:0.9em;' }, item.timestamp),
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:500;' }, item.endpoint !== undefined ? `E${item.endpoint}` : '—'),
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:500;' }, item.sensor !== undefined ? `S${item.sensor}` : '—'),
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; text-align:center;' }, item.posicion !== undefined ? item.posicion : '—'),
+                el('td', { 
+                  style: `padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:600; color:${item.temp && (item.temp < 15 || item.temp > 30) ? '#d32f2f' : '#4CAF50'};` 
+                }, item.temp !== undefined ? `${item.temp.toFixed(1)}°C` : '—'),
+                el('td', { 
+                  style: `padding:4px 6px; border:1px solid #f0f0f0; text-align:center; font-weight:600; color:${item.humedad && (item.humedad < 30 || item.humedad > 80) ? '#d32f2f' : '#4CAF50'};` 
+                }, item.humedad !== undefined ? `${item.humedad.toFixed(1)}%` : '—'),
+                el('td', { style: 'padding:4px 6px; border:1px solid #f0f0f0; font-size:0.85em; color:#666;' }, item.topic || '—')
+              ))
+            )
+          )
+        );
+
+        content.innerHTML = '';
+        content.appendChild(el('div', { style: 'margin-bottom:6px; font-size:11px; color:#666;' }, `📊 Mostrando últimos ${Math.min(dashboardData.length, 50)} registros de InfluxDB`));
+        content.appendChild(dashboardTable);
+
+      } catch (error) {
+        console.error('Error cargando dashboard de InfluxDB:', error);
+        const content = dashboardContainer.querySelector('#influx-dashboard-content');
+        if (content) {
+          content.innerHTML = `<div style="text-align:center; padding:20px; color:#d32f2f;">Error cargando dashboard: ${error.message}</div>`;
+        }
+      }
+    }
+
+    // Función auxiliar para parsear datos de sensor de InfluxDB
+    function parseInfluxSensorData(row, sensorId) {
+      const parsed = {
+        timestamp: row.timestamp ? new Date(row.timestamp).toLocaleString() : '—',
+        topic: row.topic || '—',
+        sensorId: sensorId
+      };
+
+      // Buscar datos de este sensor en el formato endpoints_X_sensores_Y_propiedad
+      Object.keys(row).forEach(key => {
+        if (['timestamp', 'topic', 'host'].includes(key)) return;
+        
+        const match = key.match(/^endpoints_(\d+)_sensores_(\d+)_(.+)$/);
+        if (match) {
+          const [, endpointIdx, sensorIdx, property] = match;
+          
+          // Solo procesar si coincide con algún índice de sensor conocido
+          if (property === 'temp' || property === 'temperatura') {
+            parsed.temp = row[key];
+            parsed.endpoint = parseInt(endpointIdx);
+            parsed.sensor = parseInt(sensorIdx);
+          } else if (property === 'humedad' || property === 'humidity') {
+            parsed.humedad = row[key];
+            if (!parsed.endpoint) parsed.endpoint = parseInt(endpointIdx);
+            if (!parsed.sensor) parsed.sensor = parseInt(sensorIdx);
+          } else if (property === 'posicion' || property === 'position') {
+            parsed.posicion = row[key];
+          }
+        }
+      });
+
+      return (parsed.temp !== undefined || parsed.humedad !== undefined) ? parsed : null;
+    }
+
+    // Cargar dashboard inicialmente
+    await loadInfluxDashboard();
+
+    // Auto-refresh cada 30 segundos
+    const refreshInterval = setInterval(loadInfluxDashboard, 30000);
+
+    // Limpiar intervalo al salir
+    window.addEventListener('beforeunload', () => {
+      clearInterval(refreshInterval);
+    });
+
+    return dashboardContainer;
+  }
+
+  // Crear gráfico de series temporales basado en datos históricos de InfluxDB
+  async function createInfluxTimeSeriesChart() {
+    const chartContainer = el("div", { 
+      class: "card dispositivos-section",
+      id: "dispositivos-charts",
+      style: "margin-top: 15px; margin-bottom: 15px; padding: 10px;" 
+    },
+      el("h3", { style: "margin-bottom: 10px; font-size: 1.1em; padding-bottom: 8px; border-bottom: 2px solid #0284c7;" }, "📈 Gráfico de Series Temporales - Datos Históricos InfluxDB"),
+      el("div", { style: "margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" },
+        el("input", {
+          type: "text",
+          id: "chart-search-input",
+          placeholder: "🔍 Buscar por Endpoint, Sensor o ID...",
+          style: "flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;",
+          autocomplete: "off"
+        }),
+        el("button", {
+          class: "btn btn-sm",
+          id: "clear-chart-search",
+          style: "padding: 6px 12px; font-size: 0.85em;"
+        }, "Limpiar")
+      ),
+      el("div", { id: "influx-chart-content", style: "min-height: 300px; position: relative;" }, "Cargando gráfico...")
+    );
+
+    let chartData = [];
+    let filteredChartData = [];
+    let searchQuery = '';
+    const canvas = document.createElement('canvas');
+    canvas.width = 900;
+    canvas.height = 400;
+    canvas.style.cssText = "max-width:100%;height:auto;border:1px solid #242b36;border-radius:8px;background:#1a1f2e;cursor: crosshair;";
+    
+    const chartContent = chartContainer.querySelector('#influx-chart-content');
+    
+    // Función para cargar datos de InfluxDB para el gráfico
+    async function loadChartData() {
+      try {
+        chartContent.innerHTML = '';
+        chartContent.appendChild(el('div', { style: 'text-align:center; padding:20px; color:#666;' }, 'Cargando datos históricos...'));
+        
+        // Obtener dispositivos
+        const devicesResponse = await DevicesAPI.getAllDevices();
+        if (!devicesResponse.success || !Array.isArray(devicesResponse.data)) {
+          chartContent.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay dispositivos disponibles</div>';
+          return;
+        }
+
+        const devices = devicesResponse.data;
+        const sensors = devices.filter(d => d.tipo === 'sensor');
+        
+        if (sensors.length === 0) {
+          chartContent.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay sensores disponibles</div>';
+          return;
+        }
+
+        // Cargar datos históricos de InfluxDB (última hora)
+        const seriesData = new Map(); // key: `${endpoint}-${sensor}`, value: {temp: [], hum: []}
+        
+        for (const sensor of sensors.slice(0, 15)) { // Limitar a 15 sensores
+          try {
+            const influxResponse = await DevicesAPI.getHistoricalData(
+              sensor.id_dispositivo, 
+              60, // Últimos 60 puntos
+              "1h" // Última hora
+            );
+            
+            if (influxResponse.success && Array.isArray(influxResponse.data) && influxResponse.data.length > 0) {
+              influxResponse.data.forEach(row => {
+                Object.keys(row).forEach(key => {
+                  if (['timestamp', 'topic', 'host'].includes(key)) return;
+                  
+                  const match = key.match(/^endpoints_(\d+)_sensores_(\d+)_(.+)$/);
+                  if (match) {
+                    const [, endpointIdx, sensorIdx, property] = match;
+                    const seriesKey = `E${endpointIdx}S${sensorIdx}`;
+                    
+                    if (!seriesData.has(seriesKey)) {
+                      seriesData.set(seriesKey, {
+                        endpoint: parseInt(endpointIdx),
+                        sensor: parseInt(sensorIdx),
+                        id: `${endpointIdx}-${sensorIdx}`,
+                        temp: [],
+                        hum: []
+                      });
+                    }
+                    
+                    const series = seriesData.get(seriesKey);
+                    const timestamp = row.timestamp ? new Date(row.timestamp).getTime() : Date.now();
+                    
+                    if ((property === 'temp' || property === 'temperatura') && row[key] !== undefined) {
+                      series.temp.push({ timestamp, value: parseFloat(row[key]) });
+                    } else if ((property === 'humedad' || property === 'humidity') && row[key] !== undefined) {
+                      series.hum.push({ timestamp, value: parseFloat(row[key]) });
+                    }
+                  }
+                });
+              });
+            }
+          } catch (err) {
+            console.warn(`Error cargando datos para gráfico del sensor ${sensor.id_dispositivo}:`, err);
+          }
+        }
+
+        // Convertir a array y ordenar
+        chartData = Array.from(seriesData.values()).map(series => ({
+          ...series,
+          temp: series.temp.sort((a, b) => a.timestamp - b.timestamp),
+          hum: series.hum.sort((a, b) => a.timestamp - b.timestamp)
+        }));
+
+        filterCharts(searchQuery);
+      } catch (error) {
+        console.error('Error cargando datos para gráfico:', error);
+        chartContent.innerHTML = `<div style="text-align:center; padding:20px; color:#d32f2f;">Error cargando gráfico: ${error.message}</div>`;
+      }
+    }
+
+    // Función para filtrar series según búsqueda
+    function filterCharts(query) {
+      searchQuery = query.toLowerCase().trim();
+      
+      if (!searchQuery) {
+        filteredChartData = [...chartData];
+      } else {
+        filteredChartData = chartData.filter(series => {
+          const searchStr = `E${series.endpoint}S${series.sensor} ${series.id} endpoint${series.endpoint} sensor${series.sensor}`.toLowerCase();
+          return searchStr.includes(searchQuery);
+        });
+      }
+      
+      renderChart();
+    }
+
+    // Función para renderizar el gráfico
+    function renderChart() {
+      if (!chartContent) return;
+      
+      chartContent.innerHTML = '';
+      
+      if (filteredChartData.length === 0) {
+        chartContent.appendChild(el('div', { 
+          style: 'text-align:center; padding:40px; color:#999;' 
+        }, 'No hay datos para mostrar con los filtros aplicados'));
+        return;
+      }
+
+      // Crear contenedor del canvas
+      const canvasContainer = el('div', { style: 'position: relative; margin-bottom: 10px;' });
+      canvasContainer.appendChild(canvas);
+      chartContent.appendChild(canvasContainer);
+
+      // Dibujar gráfico
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Fondo con grid
+      ctx.strokeStyle = "#2b3341";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        const y = (H - 40) * (i / 4) + 20;
+        ctx.beginPath();
+        ctx.moveTo(20, y);
+        ctx.lineTo(W - 20, y);
+        ctx.stroke();
+      }
+
+      // Calcular rango de tiempo (última hora)
+      const now = Date.now();
+      const oneHourAgo = now - (60 * 60 * 1000);
+      const timeRange = 60 * 60 * 1000;
+
+      // Obtener todos los valores de temperatura y humedad
+      const allTempValues = [];
+      const allHumValues = [];
+      filteredChartData.forEach(series => {
+        series.temp.forEach(p => allTempValues.push(p.value));
+        series.hum.forEach(p => allHumValues.push(p.value));
+      });
+
+      const tMin = allTempValues.length ? Math.min(...allTempValues) : 0;
+      const tMax = allTempValues.length ? Math.max(...allTempValues) : 1;
+      const tPad = (tMax - tMin) * 0.1 || 5;
+      const tYMin = Math.floor(tMin - tPad);
+      const tYMax = Math.ceil(tMax + tPad);
+
+      const hMin = allHumValues.length ? Math.min(...allHumValues) : 0;
+      const hMax = allHumValues.length ? Math.max(...allHumValues) : 100;
+      const hPad = (hMax - hMin) * 0.1 || 5;
+      const hYMin = Math.floor(hMin - hPad);
+      const hYMax = Math.ceil(hMax + hPad);
+
+      // Colores para series
+      const COLORS = [
+        "#46a0ff", "#4CAF50", "#FF5722", "#9C27B0", "#FFC107",
+        "#00BCD4", "#E91E63", "#8BC34A", "#FF9800", "#3F51B5"
+      ];
+
+      function getColor(index) {
+        return COLORS[index % COLORS.length];
+      }
+
+      // Función para calcular posición X desde timestamp
+      const getXFromTimestamp = (timestamp) => {
+        const normalizedTime = Math.max(0, Math.min(1, (timestamp - oneHourAgo) / timeRange));
+        return 20 + normalizedTime * (W - 40);
+      };
+
+      // Dibujar líneas de temperatura
+      filteredChartData.forEach((series, seriesIdx) => {
+        if (series.temp.length === 0) return;
+        
+        const color = getColor(seriesIdx);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        series.temp.forEach((p, i) => {
+          const x = getXFromTimestamp(p.timestamp);
+          const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Puntos de temperatura
+        ctx.fillStyle = color;
+        series.temp.forEach(p => {
+          const x = getXFromTimestamp(p.timestamp);
+          const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
+          ctx.beginPath();
+          ctx.arc(x, y, 2, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      });
+
+      // Dibujar líneas de humedad (discontinuas)
+      filteredChartData.forEach((series, seriesIdx) => {
+        if (series.hum.length === 0) return;
+        
+        const color = getColor(seriesIdx);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        
+        series.hum.forEach((p, i) => {
+          const x = getXFromTimestamp(p.timestamp);
+          const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Puntos de humedad
+        ctx.fillStyle = color;
+        series.hum.forEach(p => {
+          const x = getXFromTimestamp(p.timestamp);
+          const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
+          ctx.beginPath();
+          ctx.arc(x, y, 2, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      });
+
+      // Etiquetas de escala temperatura (izquierda)
+      ctx.fillStyle = "#9aa4b2";
+      ctx.font = "12px system-ui";
+      ctx.textAlign = "left";
+      ctx.fillText(`${tYMin}°C`, 5, H - 15);
+      ctx.fillText(`${tYMax}°C`, 5, 25);
+
+      // Etiquetas de escala humedad (derecha)
+      ctx.textAlign = "right";
+      ctx.fillText(`${hYMin}%`, W - 5, H - 15);
+      ctx.fillText(`${hYMax}%`, W - 5, 25);
+
+      // Eje X con timestamps (última hora)
+      ctx.fillStyle = "#9aa4b2";
+      ctx.font = "11px system-ui";
+      ctx.textAlign = "center";
+      
+      for (let i = 0; i < 6; i++) {
+        const x = 20 + (i / 5) * (W - 40);
+        const timeValue = oneHourAgo + (i / 5) * timeRange;
+        const timeDate = new Date(timeValue);
+        const hours = timeDate.getHours().toString().padStart(2, '0');
+        const minutes = timeDate.getMinutes().toString().padStart(2, '0');
+        const timeLabel = `${hours}:${minutes}`;
+        
+        ctx.fillText(timeLabel, x, H - 5);
+        
+        // Línea vertical guía
+        ctx.strokeStyle = "#2b3341";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 20);
+        ctx.lineTo(x, H - 20);
+        ctx.stroke();
+      }
+
+      // Leyenda
+      const legendContainer = el('div', { 
+        style: 'margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px; display: flex; flex-wrap: wrap; gap: 10px;' 
+      });
+
+      filteredChartData.forEach((series, idx) => {
+        const color = getColor(idx);
+        const legendItem = el('div', {
+          style: `display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: white; border-radius: 4px; border-left: 3px solid ${color};`
+        },
+          el('span', {
+            style: `width: 12px; height: 2px; background: ${color}; display: inline-block;`
+          }),
+          el('span', { style: 'font-size: 0.85em; font-weight: 500;' }, `E${series.endpoint}S${series.sensor}`),
+          el('span', { style: 'font-size: 0.75em; color: #666;' }, `(Temp: ${series.temp.length > 0 ? series.temp[series.temp.length - 1].value.toFixed(1) + '°C' : '—'}, Hum: ${series.hum.length > 0 ? series.hum[series.hum.length - 1].value.toFixed(1) + '%' : '—'})`)
+        );
+        legendContainer.appendChild(legendItem);
+      });
+
+      chartContent.appendChild(legendContainer);
+
+      // Estadísticas
+      const statsContainer = el('div', {
+        style: 'margin-top: 10px; padding: 8px; background: #f9f9f9; border-radius: 4px; font-size: 0.85em; color: #666;'
+      }, `📊 Mostrando ${filteredChartData.length} serie${filteredChartData.length !== 1 ? 's' : ''} de ${chartData.length} total${chartData.length !== 1 ? 'es' : ''}`);
+      chartContent.appendChild(statsContainer);
+    }
+
+    // Event listeners para búsqueda y limpiar
+    setTimeout(() => {
+      const searchInput = chartContainer.querySelector('#chart-search-input');
+      const clearButton = chartContainer.querySelector('#clear-chart-search');
+      
+      if (searchInput) {
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+          clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => {
+            filterCharts(e.target.value);
+          }, 300);
+        });
+      }
+      
+      if (clearButton) {
+        clearButton.addEventListener('click', () => {
+          const searchInput = chartContainer.querySelector('#chart-search-input');
+          if (searchInput) {
+            searchInput.value = '';
+            filterCharts('');
+          }
+        });
+      }
+    }, 100);
+
+    // Cargar datos inicialmente
+    await loadChartData();
+
+    // Auto-refresh cada 30 segundos
+    const refreshInterval = setInterval(loadChartData, 30000);
+
+    // Limpiar intervalo al salir
+    window.addEventListener('beforeunload', () => {
+      clearInterval(refreshInterval);
+    });
+
+    return chartContainer;
+  }
+
+  // Construir la página con dashboard de InfluxDB y gráfico
+  const influxDashboard = await createInfluxDBDashboard();
+  const timeSeriesChart = await createInfluxTimeSeriesChart();
+  
+  // Crear menú de navegación sticky con botón hamburguesa (similar al de dashboard.js)
+  const dispositivosNav = el("nav", { class: "dashboard-nav-menu" },
+    el("button", { 
+      class: "dashboard-nav-toggle",
+      id: "dispositivos-nav-toggle",
+      "aria-label": "Abrir menú de navegación",
+      onclick: () => {
+        const menu = dispositivosNav;
+        const overlay = document.getElementById('dispositivos-nav-overlay');
+        if (menu && overlay) {
+          menu.classList.toggle('mobile-menu');
+          menu.classList.toggle('active');
+          overlay.classList.toggle('active');
+          // Cambiar icono del botón
+          const toggleBtn = document.getElementById('dispositivos-nav-toggle');
+          if (toggleBtn) {
+            toggleBtn.textContent = menu.classList.contains('active') ? '✕' : '☰';
+          }
+        }
+      }
+    }, "☰"),
+    el("div", { class: "dashboard-nav-overlay", id: "dispositivos-nav-overlay", onclick: () => {
+      const menu = dispositivosNav;
+      const overlay = document.getElementById('dispositivos-nav-overlay');
+      if (menu && overlay) {
+        menu.classList.remove('mobile-menu', 'active');
+        overlay.classList.remove('active');
+        const toggleBtn = document.getElementById('dispositivos-nav-toggle');
+        if (toggleBtn) {
+          toggleBtn.textContent = '☰';
+        }
+      }
+    }}),
+    el("ul", {},
+      el("li", {},
+        el("a", { href: "#dispositivos-header", "data-section": "header" }, "📊 Inicio")
+      ),
+      el("li", {},
+        el("a", { href: "#dispositivos-influx-dashboard", "data-section": "influx-dashboard" }, "📊 Dashboard InfluxDB")
+      ),
+      el("li", {},
+        el("a", { href: "#dispositivos-charts", "data-section": "charts" }, "📈 Gráficos")
+      ),
+      el("li", {},
+        el("a", { href: "#dispositivos-container", "data-section": "devices" }, "📱 Dispositivos")
+      )
+    )
+  );
+
+  // Añadir IDs y clases a las secciones
+  header.id = "dispositivos-header";
+  header.classList.add("dispositivos-section");
+  
+  influxDashboard.id = "dispositivos-influx-dashboard";
+  influxDashboard.classList.add("dispositivos-section");
+  
+  timeSeriesChart.id = "dispositivos-charts";
+  timeSeriesChart.classList.add("dispositivos-section");
+  
+  devicesContainer.id = "dispositivos-container";
+  devicesContainer.classList.add("dispositivos-section");
+
   const page = el("div", {},
+    dispositivosNav,
     header,
     refreshButton,
     lastUpdateIndicator,
+    influxDashboard,
+    timeSeriesChart,
     devicesContainer
+  );
+
+  // Script para navegación activa y scroll
+  const navScript = `
+    (function() {
+      const navLinks = document.querySelectorAll('.dashboard-nav-menu a[data-section]');
+      const sections = document.querySelectorAll('.dispositivos-section');
+      
+      // Función para actualizar link activo
+      function updateActiveLink() {
+        const scrollPos = window.scrollY + 100;
+        
+        sections.forEach((section) => {
+          const top = section.offsetTop;
+          const bottom = top + section.offsetHeight;
+          
+          if (scrollPos >= top && scrollPos < bottom) {
+            navLinks.forEach(link => link.classList.remove('active'));
+            const sectionId = section.id ? section.id.replace('dispositivos-', '') : '';
+            const activeLink = document.querySelector(\`[data-section="\${sectionId}"]\`);
+            if (activeLink) {
+              activeLink.classList.add('active');
+            }
+          }
+        });
+      }
+      
+      // Event listeners
+      navLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+          e.preventDefault();
+          const targetId = this.getAttribute('href');
+          const target = document.querySelector(targetId);
+          if (target) {
+            const navMenu = document.querySelector('.dashboard-nav-menu');
+            const navbar = document.querySelector('.navbar');
+            const offsetTop = target.offsetTop - (navMenu ? navMenu.offsetHeight : 0) - (navbar ? navbar.offsetHeight : 0);
+            window.scrollTo({
+              top: offsetTop,
+              behavior: 'smooth'
+            });
+            
+            // Cerrar menú móvil si está abierto
+            if (navMenu && navMenu.classList.contains('mobile-menu')) {
+              const overlay = document.getElementById('dispositivos-nav-overlay');
+              navMenu.classList.remove('mobile-menu', 'active');
+              if (overlay) overlay.classList.remove('active');
+              const toggleBtn = document.getElementById('dispositivos-nav-toggle');
+              if (toggleBtn) toggleBtn.textContent = '☰';
+            }
+          }
+        });
+      });
+      
+      window.addEventListener('scroll', updateActiveLink);
+      updateActiveLink(); // Inicial
+    })();
+  `;
+
+  const pageWithScript = el("div", {},
+    page,
+    el("script", {}, navScript)
   );
 
   // Actualizar vista inicial
   await updateDevicesView();
   updateLastUpdateIndicator();
 
-  return page;
+  return pageWithScript;
 }
 
 // Agregar estilos CSS para la animación de pulso y mejoras visuales
