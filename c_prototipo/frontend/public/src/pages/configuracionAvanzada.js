@@ -5,7 +5,7 @@
 // ==========================
 import { el } from "../utils/dom.js";
 import { getState } from "../state/store.js";
-import { ConfigAPI } from "../api.js";
+import { ConfigAPI, invalidateCache } from "../api.js";
 import { configService } from "../utils/configService.js";
 import { mqttTopicsService } from "../utils/mqttTopicsService.js";
 import { mqttTopicsManager } from "../components/mqttTopicsManager.js";
@@ -472,6 +472,9 @@ export async function render() {
       }
       
       if (success) {
+        // Invalidar cache de configuración avanzada en la API
+        invalidateCache("/config/advanced", "GET");
+        
         alert("Configuración avanzada guardada exitosamente");
         console.log("Configuración avanzada:", config);
       } else {
@@ -570,7 +573,7 @@ export async function render() {
       // Primero intentar cargar desde el servidor (solo admin)
       try {
         const serverConfig = await configService.loadFromServer("advanced");
-        configService.setAdvancedConfig(serverConfig);
+        await configService.setAdvancesConfig(serverConfig);
       } catch (error) {
         console.warn("No se pudo cargar configuración del servidor, usando local:", error);
       }
@@ -784,11 +787,57 @@ export async function render() {
   };
 
   // Cargar configuración cuando se monta el componente
-  setTimeout(async () => {
+  let loadConfigTimeout = null;
+  let mqttEventListeners = [];
+  
+  loadConfigTimeout = setTimeout(async () => {
     await loadAdvancedConfig();
     await loadMQTTTopics();
     setupMQTTEventListeners();
   }, 100);
+
+  // Limpieza al salir de la página
+  const cleanup = () => {
+    // Limpiar timeout
+    if (loadConfigTimeout) {
+      clearTimeout(loadConfigTimeout);
+      loadConfigTimeout = null;
+    }
+    
+    // Limpiar event listeners de botones MQTT
+    const refreshBtn = document.getElementById("refresh-topics-btn");
+    const reloadBtn = document.getElementById("reload-mqtt-topics-btn");
+    const restartBtn = document.getElementById("restart-mqtt-btn");
+    const clearCacheBtn = document.getElementById("clear-cache-btn");
+    
+    if (refreshBtn) refreshBtn.replaceWith(refreshBtn.cloneNode(true));
+    if (reloadBtn) reloadBtn.replaceWith(reloadBtn.cloneNode(true));
+    if (restartBtn) restartBtn.replaceWith(restartBtn.cloneNode(true));
+    if (clearCacheBtn) clearCacheBtn.replaceWith(clearCacheBtn.cloneNode(true));
+    
+    // Limpiar funciones globales
+    delete window.saveAdvancedConfig;
+    delete window.reloadMQTTConnection;
+    delete window.clearDataCache;
+    delete window.exportConfiguration;
+    delete window.importConfiguration;
+    delete window.resetSystemConfig;
+    
+    // Limpiar cache de configuración (solo cache en memoria, mantiene localStorage)
+    configService.clearCache();
+    
+    console.log('[Configuración Avanzada] Limpieza completada');
+  };
+
+  // Escuchar evento de navegación para limpiar
+  const navigationHandler = () => {
+    cleanup();
+    window.removeEventListener('hashchange', navigationHandler);
+    window.removeEventListener('beforeunload', cleanup);
+  };
+
+  window.addEventListener('hashchange', navigationHandler);
+  window.addEventListener('beforeunload', cleanup);
 
   // Crear el componente de gestión de tópicos MQTT
   const mqttTopicsManagerComponent = await mqttTopicsManager();

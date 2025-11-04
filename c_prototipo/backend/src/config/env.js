@@ -19,7 +19,7 @@ const schema = Joi.object({
 
   // Seguridad JWT propia
   JWT_SECRET: Joi.string().min(24).required(),
-  JWT_EXPIRES_IN: Joi.string().default("15m"),
+  JWT_EXPIRES_IN: Joi.string().default("30m"), // 30 minutos de expiración
   REFRESH_EXPIRES_IN: Joi.string().default("7d"), // reservado para posibles cookies
 
   // Google Identity Services

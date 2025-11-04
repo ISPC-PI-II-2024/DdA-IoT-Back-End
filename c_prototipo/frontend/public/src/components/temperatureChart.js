@@ -26,6 +26,188 @@ export async function temperatureChartWidget({
   const finalMaxPoints = maxPoints || config.chartPoints || 60;
   const temperatureUnit = config.temperatureUnit || "celsius";
   let chartRefreshInterval = Math.max(config.chartRefresh || 15000, 15000); // Mínimo 15 segundos (mutable para actualización dinámica)
+  
+  // Contenedor de leyenda interactiva (filtros) - se creará después de definir las funciones
+  let legendContainer = null;
+  
+  // Función para renderizar leyenda interactiva
+  function renderLegend() {
+    if (!legendContainer) return;
+    legendContainer.innerHTML = "";
+    
+    const legendTitle = el("div", {
+      style: "font-weight: 600; color: #ffffff; margin-bottom: 10px; font-size: 0.9rem;"
+    }, "📊 Filtros de Series (Clic para mostrar/ocultar)");
+    legendContainer.appendChild(legendTitle);
+    
+    const sensors = Array.from(sensorIds).sort();
+    
+    if (sensors.length === 0) {
+      legendContainer.appendChild(el("div", {
+        style: "color: #9aa4b2; font-size: 0.85rem; padding: 10px; text-align: center;"
+      }, "No hay sensores disponibles"));
+      return;
+    }
+    
+    sensors.forEach(sid => {
+      const keyT = `${sid}:temp`;
+      const keyH = `${sid}:hum`;
+      const cT = colorForKey(keyT);
+      const cH = colorForKey(keyH);
+      const visibleT = isSeriesVisible(keyT);
+      const visibleH = isSeriesVisible(keyH);
+      
+      // Contenedor por sensor
+      const sensorGroup = el("div", {
+        style: `
+          margin-bottom: 12px;
+          padding: 8px;
+          background: #2a3f5f;
+          border-radius: 4px;
+          border-left: 3px solid ${cT};
+        `
+      });
+      
+      // Título del sensor
+      const sensorTitle = el("div", {
+        style: "font-weight: 600; color: #ffffff; margin-bottom: 6px; font-size: 0.85rem;"
+      }, `Sensor ${sid}`);
+      sensorGroup.appendChild(sensorTitle);
+      
+      // Checkbox para temperatura
+      const tempCheckbox = el("label", {
+        style: `
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          padding: 4px 8px;
+          border-radius: 4px;
+          transition: background 0.2s;
+          user-select: none;
+        `,
+        onmouseover: (e) => e.target.style.background = "#3a4f6f",
+        onmouseout: (e) => e.target.style.background = "transparent",
+        onclick: () => {
+          toggleSeriesVisibility(keyT);
+          renderLegend();
+        }
+      },
+        el("input", {
+          type: "checkbox",
+          checked: visibleT,
+          style: "cursor: pointer;",
+          onclick: (e) => e.stopPropagation()
+        }),
+        el("span", {
+          style: `
+            display: inline-block;
+            width: 16px;
+            height: 3px;
+            background: ${visibleT ? cT : '#666'};
+            border-radius: 2px;
+            opacity: ${visibleT ? 1 : 0.5};
+          `
+        }),
+        el("span", {
+          style: `color: ${visibleT ? '#ffffff' : '#9aa4b2'}; font-size: 0.85rem;`
+        }, "🌡️ Temperatura")
+      );
+      sensorGroup.appendChild(tempCheckbox);
+      
+      // Checkbox para humedad
+      const humCheckbox = el("label", {
+        style: `
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          padding: 4px 8px;
+          border-radius: 4px;
+          transition: background 0.2s;
+          user-select: none;
+        `,
+        onmouseover: (e) => e.target.style.background = "#3a4f6f",
+        onmouseout: (e) => e.target.style.background = "transparent",
+        onclick: () => {
+          toggleSeriesVisibility(keyH);
+          renderLegend();
+        }
+      },
+        el("input", {
+          type: "checkbox",
+          checked: visibleH,
+          style: "cursor: pointer;",
+          onclick: (e) => e.stopPropagation()
+        }),
+        el("span", {
+          style: `
+            display: inline-block;
+            width: 16px;
+            height: 3px;
+            background: ${visibleH ? cH : '#666'};
+            border-radius: 2px;
+            opacity: ${visibleH ? 1 : 0.5};
+            border-style: dashed;
+            border-width: 1px;
+            border-color: ${visibleH ? cH : '#666'};
+          `
+        }),
+        el("span", {
+          style: `color: ${visibleH ? '#ffffff' : '#9aa4b2'}; font-size: 0.85rem;`
+        }, "💧 Humedad")
+      );
+      sensorGroup.appendChild(humCheckbox);
+      
+      legendContainer.appendChild(sensorGroup);
+    });
+    
+    // Botón "Mostrar todo" / "Ocultar todo"
+    const toggleAllContainer = el("div", {
+      style: "margin-top: 10px; display: flex; gap: 8px;"
+    },
+      el("button", {
+        class: "btn btn-sm",
+        style: "padding: 4px 12px; font-size: 0.8rem; background: #46a0ff; color: white; border: none; border-radius: 4px; cursor: pointer;",
+        onclick: () => {
+          seriesMap.forEach((arr, key) => {
+            seriesVisibility.set(key, true);
+          });
+          saveFiltersToStorage();
+          renderLegend();
+          dirty = true;
+        }
+      }, "✅ Mostrar Todo"),
+      el("button", {
+        class: "btn btn-sm",
+        style: "padding: 4px 12px; font-size: 0.8rem; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;",
+        onclick: () => {
+          seriesMap.forEach((arr, key) => {
+            seriesVisibility.set(key, false);
+          });
+          saveFiltersToStorage();
+          renderLegend();
+          dirty = true;
+        }
+      }, "❌ Ocultar Todo")
+    );
+    legendContainer.appendChild(toggleAllContainer);
+  }
+  
+  // Crear contenedor de leyenda
+  legendContainer = el("div", {
+    id: "chart-legend-container",
+    style: `
+      margin-top: 10px;
+      padding: 12px;
+      background: #1a1f2e;
+      border: 1px solid #242b36;
+      border-radius: 6px;
+      max-height: 200px;
+      overflow-y: auto;
+    `
+  });
+
   const root = el("div", { class: "card" },
     el("h3", {}, title),
     el("div", { 
@@ -37,7 +219,8 @@ export async function temperatureChartWidget({
         height: 300, 
         style: "max-width:100%;height:auto;border:1px solid #242b36;border-radius:8px;background:#1a1f2e;cursor: crosshair;" 
       })
-    )
+    ),
+    legendContainer
   );
 
   if (showStats) {
@@ -83,6 +266,63 @@ export async function temperatureChartWidget({
   const sensorIds = new Set();
   let dirty = false;
   let lastRenderTime = 0; // Para throttling de renderizado según chartRefreshInterval
+  
+  // Sistema de filtros: Map de series visibles/ocultas
+  // key: `${sensorId}:temp` o `${sensorId}:hum`, value: boolean (true = visible)
+  const seriesVisibility = new Map();
+  
+  // Clave para localStorage (única por gráfico)
+  const storageKey = `chart_filters_${deviceId || 'global'}_${deviceType || 'all'}`;
+  
+  // Función para cargar filtros desde localStorage
+  function loadFiltersFromStorage() {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const savedFilters = JSON.parse(saved);
+        Object.entries(savedFilters).forEach(([key, visible]) => {
+          seriesVisibility.set(key, visible);
+        });
+      }
+    } catch (error) {
+      console.warn('[Chart] Error cargando filtros desde localStorage:', error);
+    }
+  }
+  
+  // Función para guardar filtros en localStorage
+  function saveFiltersToStorage() {
+    try {
+      const filtersObj = Object.fromEntries(seriesVisibility);
+      localStorage.setItem(storageKey, JSON.stringify(filtersObj));
+    } catch (error) {
+      console.warn('[Chart] Error guardando filtros en localStorage:', error);
+    }
+  }
+  
+  // Función para inicializar visibilidad (todas visibles por defecto o desde storage)
+  function initializeVisibility() {
+    // Cargar desde storage primero
+    loadFiltersFromStorage();
+    
+    seriesMap.forEach((arr, key) => {
+      if (!seriesVisibility.has(key)) {
+        seriesVisibility.set(key, true); // Por defecto todas visibles
+      }
+    });
+  }
+  
+  // Función para togglear visibilidad de una serie
+  function toggleSeriesVisibility(key) {
+    const current = seriesVisibility.get(key) !== false; // true por defecto
+    seriesVisibility.set(key, !current);
+    saveFiltersToStorage(); // Guardar en localStorage
+    dirty = true; // Forzar re-render
+  }
+  
+  // Función para verificar si una serie es visible
+  function isSeriesVisible(key) {
+    return seriesVisibility.get(key) !== false; // true por defecto
+  }
 
   // Paleta de colores para líneas (rotación determinística por clave)
   const COLORS = [
@@ -149,6 +389,9 @@ export async function temperatureChartWidget({
     
     sensorIds.add(sid);
     
+    // Inicializar visibilidad si es la primera vez que vemos esta serie
+    initializeVisibility();
+    
     // Extraer temperatura (soporta diferentes formatos: temperature, temp, temperatura)
     const tempValue = point.temperature !== undefined ? point.temperature : 
                      point.temp !== undefined ? point.temp : 
@@ -187,6 +430,11 @@ export async function temperatureChartWidget({
     // El renderizado se throttlerá según chartRefreshInterval
     dirty = true;
     updateStats();
+    
+    // Actualizar leyenda si hay nuevos sensores
+    if (sensorIds.size > 0) {
+      renderLegend();
+    }
   }
 
   function updateStats() {
@@ -194,22 +442,26 @@ export async function temperatureChartWidget({
     const sensors = Array.from(sensorIds);
     if (sensors.length === 0) return;
     const items = sensors.map(sid => {
-      const tArr = seriesMap.get(`${sid}:temp`) || [];
-      const hArr = seriesMap.get(`${sid}:hum`) || [];
+      const keyT = `${sid}:temp`;
+      const keyH = `${sid}:hum`;
+      const tArr = seriesMap.get(keyT) || [];
+      const hArr = seriesMap.get(keyH) || [];
       const latestT = tArr.length ? tArr[tArr.length - 1].value : null;
       const latestH = hArr.length ? hArr[hArr.length - 1].value : null;
-      const colorT = colorForKey(`${sid}:temp`);
-      const colorH = colorForKey(`${sid}:hum`);
+      const colorT = colorForKey(keyT);
+      const colorH = colorForKey(keyH);
+      const visibleT = isSeriesVisible(keyT);
+      const visibleH = isSeriesVisible(keyH);
       return `
-        <div class="stat-item" style="background:#2a3f5f;padding:0.5rem;border-radius:4px;min-width:120px;">
+        <div class="stat-item" style="background:#2a3f5f;padding:0.5rem;border-radius:4px;min-width:120px;opacity:${visibleT || visibleH ? 1 : 0.5};">
           <div style="font-size:0.75rem;color:#9aa4b2;">Sensor ${sid}</div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorT}"></span>
-            <span style="font-size:1rem;font-weight:bold;color:${colorT};">${latestT !== null ? formatTemperature(latestT) : '—'}</span>
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorT};opacity:${visibleT ? 1 : 0.3};"></span>
+            <span style="font-size:1rem;font-weight:bold;color:${colorT};opacity:${visibleT ? 1 : 0.5};">${latestT !== null ? formatTemperature(latestT) : '—'}</span>
           </div>
           <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-            <span style="display:inline-block;width:8px;height:2px;background:${colorH}"></span>
-            <span style="font-size:0.95rem;font-weight:bold;color:${colorH};">${latestH !== null ? `${latestH.toFixed(1)}%` : '—'}</span>
+            <span style="display:inline-block;width:8px;height:2px;background:${colorH};opacity:${visibleH ? 1 : 0.3};"></span>
+            <span style="font-size:0.95rem;font-weight:bold;color:${colorH};opacity:${visibleH ? 1 : 0.5};">${latestH !== null ? `${latestH.toFixed(1)}%` : '—'}</span>
           </div>
         </div>`;
     }).join("");
@@ -247,10 +499,12 @@ export async function temperatureChartWidget({
       return;
     }
 
-    // Escala de temperatura (todas las series de temp)
+    // Escala de temperatura (solo series visibles de temp)
     const tempValues = [];
     seriesMap.forEach((arr, key) => {
-      if (key.endsWith(":temp")) arr.forEach(p => { if (!isNaN(p.value)) tempValues.push(p.value); });
+      if (key.endsWith(":temp") && isSeriesVisible(key)) {
+        arr.forEach(p => { if (!isNaN(p.value)) tempValues.push(p.value); });
+      }
     });
     const tMin = tempValues.length ? Math.min(...tempValues) : 0;
     const tMax = tempValues.length ? Math.max(...tempValues) : 1;
@@ -258,10 +512,12 @@ export async function temperatureChartWidget({
     const tYMin = Math.floor(tMin - tPad);
     const tYMax = Math.ceil(tMax + tPad);
 
-    // Escala de humedad (todas las series de hum)
+    // Escala de humedad (solo series visibles de hum)
     const humValues = [];
     seriesMap.forEach((arr, key) => {
-      if (key.endsWith(":hum")) arr.forEach(p => { if (!isNaN(p.value)) humValues.push(p.value); });
+      if (key.endsWith(":hum") && isSeriesVisible(key)) {
+        arr.forEach(p => { if (!isNaN(p.value)) humValues.push(p.value); });
+      }
     });
     const hMin = humValues.length ? Math.min(...humValues) : 0;
     const hMax = humValues.length ? Math.max(...humValues) : 100;
@@ -269,15 +525,52 @@ export async function temperatureChartWidget({
     const hYMin = Math.floor(hMin - hPad);
     const hYMax = Math.ceil(hMax + hPad);
 
-    // Dibujar todas las líneas de temperatura (una por sensor)
+    // Calcular escala de tiempo para el eje X (última hora)
+    const currentTime = Date.now();
+    const oneHourAgo = currentTime - (60 * 60 * 1000);
+    
+    // Obtener todos los timestamps de todas las series para calcular el rango
+    const allTimestamps = [];
+    seriesMap.forEach((arr) => {
+      arr.forEach(p => {
+        if (p.timestamp) {
+          const ts = new Date(p.timestamp).getTime();
+          if (ts >= oneHourAgo && ts <= currentTime) {
+            allTimestamps.push(ts);
+          }
+        }
+      });
+    });
+    
+    const minTime = allTimestamps.length > 0 ? Math.min(...allTimestamps) : oneHourAgo;
+    const maxTime = allTimestamps.length > 0 ? Math.max(...allTimestamps) : currentTime;
+    const timeRange = maxTime - minTime || (60 * 60 * 1000); // Fallback a 1 hora si no hay datos
+    
+    // Función para calcular posición X basada en timestamp
+    const getXFromTimestamp = (timestamp) => {
+      if (!timestamp) return 20; // Fallback a inicio
+      const ts = new Date(timestamp).getTime();
+      const normalizedTime = Math.max(0, Math.min(1, (ts - minTime) / timeRange));
+      return 20 + normalizedTime * (W - 40);
+    };
+    
+    // Función para calcular posición X basada en índice (fallback)
+    const getXFromIndex = (i, totalPoints) => {
+      if (totalPoints < 2) return 20;
+      return 20 + (i / (totalPoints - 1)) * (W - 40);
+    };
+
+    // Dibujar todas las líneas de temperatura (una por sensor) - solo si están visibles
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":temp")) return;
+      if (!isSeriesVisible(key)) return; // Saltar si está oculta
       const color = colorForKey(key);
       ctx.lineWidth = 2;
       ctx.strokeStyle = color;
       ctx.beginPath();
       arr.forEach((p, i) => {
-        const x = (i / (finalMaxPoints - 1)) * (W - 40) + 20;
+        // Usar timestamp si está disponible, sino usar índice
+        const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
         const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
@@ -285,13 +578,15 @@ export async function temperatureChartWidget({
       ctx.stroke();
     });
 
-    // Puntos (temperatura) - dibujar más grandes si están hovered
+    // Puntos (temperatura) - dibujar más grandes si están hovered - solo si están visibles
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":temp")) return;
+      if (!isSeriesVisible(key)) return; // Saltar si está oculta
       const color = colorForKey(key);
       ctx.fillStyle = color;
       arr.forEach((p, i) => {
-        const x = (i / (finalMaxPoints - 1)) * (W - 40) + 20;
+        // Usar timestamp si está disponible, sino usar índice
+        const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
         const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
         ctx.beginPath();
         // Hacer el punto más grande si está siendo hovered
@@ -316,16 +611,81 @@ export async function temperatureChartWidget({
     ctx.fillText(`${formatTemperature(tYMin)}`, 5, H - 15);
     ctx.fillText(`${formatTemperature(tYMax)}`, 5, 25);
 
-    // Dibujar todas las líneas de humedad (una por sensor) - con línea discontinua
+    // Eje X con timestamps de la última hora
+    ctx.fillStyle = "#9aa4b2";
+    ctx.font = "11px system-ui";
+    ctx.textAlign = "center";
+    
+    // Obtener el rango de tiempo de los datos (última hora) - reutilizar currentTime calculado arriba
+    const oneHourAgoForAxis = currentTime - (60 * 60 * 1000); // 1 hora en milisegundos
+    
+    // Obtener todos los timestamps de todas las series visibles
+    const allTimestampsForAxis = [];
+    seriesMap.forEach((arr, key) => {
+      if (isSeriesVisible(key)) {
+        arr.forEach(p => {
+          if (p.timestamp) {
+            const ts = new Date(p.timestamp).getTime();
+            if (ts >= oneHourAgoForAxis && ts <= currentTime) {
+              allTimestampsForAxis.push(ts);
+            }
+          }
+        });
+      }
+    });
+    
+    // Si no hay timestamps, usar índices como fallback
+    if (allTimestampsForAxis.length === 0) {
+      // Dibujar etiquetas de tiempo basadas en índices (fallback)
+      for (let i = 0; i < 5; i++) {
+        const x = 20 + (i / 4) * (W - 40);
+        const minutesAgo = 60 - (i * 15); // 60, 45, 30, 15, 0 minutos
+        const timeLabel = minutesAgo === 0 ? "Ahora" : `-${minutesAgo}m`;
+        ctx.fillText(timeLabel, x, H - 5);
+      }
+    } else {
+      // Usar timestamps reales
+      const minTimeAxis = Math.min(...allTimestampsForAxis);
+      const maxTimeAxis = Math.max(...allTimestampsForAxis);
+      const timeRangeAxis = maxTimeAxis - minTimeAxis || 1; // Evitar división por cero
+      
+      // Dibujar 6 etiquetas de tiempo equiespaciadas
+      for (let i = 0; i < 6; i++) {
+        const x = 20 + (i / 5) * (W - 40);
+        const timeValue = minTimeAxis + (i / 5) * timeRangeAxis;
+        const timeDate = new Date(timeValue);
+        
+        // Formatear tiempo: HH:MM
+        const hours = timeDate.getHours().toString().padStart(2, '0');
+        const minutes = timeDate.getMinutes().toString().padStart(2, '0');
+        const timeLabel = `${hours}:${minutes}`;
+        
+        ctx.fillText(timeLabel, x, H - 5);
+        
+        // Dibujar línea vertical sutil para guía
+        ctx.strokeStyle = "#2b3341";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 20);
+        ctx.lineTo(x, H - 20);
+        ctx.stroke();
+      }
+    }
+    
+    ctx.textAlign = "left";
+
+    // Dibujar todas las líneas de humedad (una por sensor) - con línea discontinua - solo si están visibles
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":hum")) return;
+      if (!isSeriesVisible(key)) return; // Saltar si está oculta
       const color = colorForKey(key);
       ctx.lineWidth = 2;
       ctx.strokeStyle = color;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
       arr.forEach((p, i) => {
-        const x = (i / (finalMaxPoints - 1)) * (W - 40) + 20;
+        // Usar timestamp si está disponible, sino usar índice
+        const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
         const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
@@ -334,13 +694,15 @@ export async function temperatureChartWidget({
       ctx.setLineDash([]);
     });
     
-    // Puntos (humedad) - dibujar más grandes si están hovered
+    // Puntos (humedad) - dibujar más grandes si están hovered - solo si están visibles
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":hum")) return;
+      if (!isSeriesVisible(key)) return; // Saltar si está oculta
       const color = colorForKey(key);
       ctx.fillStyle = color;
       arr.forEach((p, i) => {
-        const x = (i / (finalMaxPoints - 1)) * (W - 40) + 20;
+        // Usar timestamp si está disponible, sino usar índice
+        const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
         const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
         ctx.beginPath();
         // Hacer el punto más grande si está siendo hovered
@@ -365,34 +727,16 @@ export async function temperatureChartWidget({
     ctx.fillText(`${hYMin}%`, W - 5, H - 15);
     ctx.fillText(`${hYMax}%`, W - 5, 25);
 
-    // Leyenda
-    let legendY = 15;
-    ctx.font = "12px system-ui";
-    ctx.textAlign = "left";
-    sensorIds.forEach(sid => {
-      const keyT = `${sid}:temp`;
-      const keyH = `${sid}:hum`;
-      const cT = colorForKey(keyT);
-      const cH = colorForKey(keyH);
-      // temp legend
-      ctx.fillStyle = cT;
-      ctx.fillRect(W - 180, legendY - 6, 18, 3);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(`Temp Sensor ${sid}`, W - 155, legendY);
-      legendY += 16;
-      // humidity legend
-      ctx.fillStyle = cH;
-      ctx.fillRect(W - 180, legendY - 6, 18, 3);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(`Hum Sensor ${sid}`, W - 155, legendY);
-      legendY += 16;
-    });
+    // Leyenda (ahora se renderiza en HTML, no en canvas)
+    // La leyenda interactiva se maneja más abajo en el código
     
     // Si hay un punto hovered, dibujar línea vertical de referencia
     if (hoveredPoint) {
       const arr = seriesMap.get(hoveredPoint.key) || [];
-      if (arr.length > 0) {
-        const x = (hoveredPoint.index / (finalMaxPoints - 1)) * (W - 40) + 20;
+      if (arr.length > 0 && hoveredPoint.index < arr.length) {
+        const p = arr[hoveredPoint.index];
+        // Usar timestamp si está disponible, sino usar índice
+        const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(hoveredPoint.index, arr.length);
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
@@ -431,10 +775,41 @@ export async function temperatureChartWidget({
     let closestPoint = null;
     let minDistance = HOVER_THRESHOLD;
     
+    // Calcular escala de tiempo para hover (igual que en draw)
+    const currentTimeForHover = Date.now();
+    const oneHourAgoForHover = currentTimeForHover - (60 * 60 * 1000);
+    const allTimestampsForHover = [];
+    seriesMap.forEach((arr) => {
+      arr.forEach(p => {
+        if (p.timestamp) {
+          const ts = new Date(p.timestamp).getTime();
+          if (ts >= oneHourAgoForHover && ts <= currentTimeForHover) {
+            allTimestampsForHover.push(ts);
+          }
+        }
+      });
+    });
+    const minTimeForHover = allTimestampsForHover.length > 0 ? Math.min(...allTimestampsForHover) : oneHourAgoForHover;
+    const maxTimeForHover = allTimestampsForHover.length > 0 ? Math.max(...allTimestampsForHover) : currentTimeForHover;
+    const timeRangeForHover = maxTimeForHover - minTimeForHover || (60 * 60 * 1000);
+    
+    const getXFromTimestampForHover = (timestamp) => {
+      if (!timestamp) return 20;
+      const ts = new Date(timestamp).getTime();
+      const normalizedTime = Math.max(0, Math.min(1, (ts - minTimeForHover) / timeRangeForHover));
+      return 20 + normalizedTime * (W - 40);
+    };
+    
+    const getXFromIndexForHover = (i, totalPoints) => {
+      if (totalPoints < 2) return 20;
+      return 20 + (i / (totalPoints - 1)) * (W - 40);
+    };
+    
     // Buscar en todas las series (temperatura y humedad)
     seriesMap.forEach((arr, key) => {
       arr.forEach((p, i) => {
-        const x = (i / (finalMaxPoints - 1)) * (W - 40) + 20;
+        // Usar timestamp si está disponible, sino usar índice
+        const x = p.timestamp ? getXFromTimestampForHover(p.timestamp) : getXFromIndexForHover(i, arr.length);
         let y;
         if (key.endsWith(":temp")) {
           y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
@@ -572,11 +947,11 @@ export async function temperatureChartWidget({
   
   // RAF loop con throttling según chartRefreshInterval
   function loop() {
-    const now = Date.now();
+    const currentLoopTime = Date.now();
     // Solo renderizar si ha pasado el intervalo mínimo configurado o hay hover activo
-    if ((dirty && (now - lastRenderTime >= chartRefreshInterval)) || hoveredPoint) {
+    if ((dirty && (currentLoopTime - lastRenderTime >= chartRefreshInterval)) || hoveredPoint) {
       draw();
-      if (!hoveredPoint) lastRenderTime = now;
+      if (!hoveredPoint) lastRenderTime = currentLoopTime;
     }
     requestAnimationFrame(loop);
   }
@@ -684,6 +1059,16 @@ export async function temperatureChartWidget({
   
   // Configurar suscripción
   await setupTopicSubscription();
+  
+  // Renderizar leyenda inicial
+  renderLegend();
+  
+  // Actualizar leyenda cuando cambien las series
+  const legendUpdateInterval = setInterval(() => {
+    if (sensorIds.size > 0) {
+      renderLegend();
+    }
+  }, 2000); // Actualizar cada 2 segundos
 
   // Cargar datos históricos iniciales
   try {
@@ -703,6 +1088,7 @@ export async function temperatureChartWidget({
     if (!document.body.contains(root)) {
       if (unsubscribe) unsubscribe();
       if (configUnsubscribe) configUnsubscribe();
+      if (legendUpdateInterval) clearInterval(legendUpdateInterval);
       observer.disconnect();
     }
   });

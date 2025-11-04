@@ -21,9 +21,25 @@ class AlertService {
     try {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
       this.loadConfig();
+      
+      // Suscribirse a cambios en la configuración avanzada para recargar umbrales
+      this.configUnsubscribe = configService.onConfigChange('advanced_config', (newConfig) => {
+        console.log('[AlertService] Configuración avanzada actualizada, recargando umbrales...');
+        this.loadConfig();
+      });
     } catch (error) {
       console.warn("[ALERT] AudioContext no disponible:", error);
       this.audioEnabled = false;
+    }
+  }
+  
+  /**
+   * Limpia recursos del servicio (listeners, etc.)
+   */
+  cleanup() {
+    if (this.configUnsubscribe) {
+      this.configUnsubscribe();
+      this.configUnsubscribe = null;
     }
   }
 

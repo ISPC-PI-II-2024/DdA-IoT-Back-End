@@ -18,8 +18,9 @@ export async function chartWidget({
   // Leer configuración de visualización
   const config = configService.getVisualizationConfig();
   
-  // Usar configuración o valor por defecto
-  const finalMaxPoints = maxPoints || config.chartPoints || 120;
+  // Usar configuración o valor por defecto (mutable para actualización dinámica)
+  let finalMaxPoints = maxPoints || config.chartPoints || 120;
+  
   const root = el("div", { class: "card" },
     el("h3", {}, title),
     el("canvas", { width: 900, height: 240, style: "max-width:100%;height:auto;border:1px solid #242b36;border-radius:8px" })
@@ -34,6 +35,27 @@ export async function chartWidget({
     if (data.length >= finalMaxPoints) data.shift();
     data.push(v);
     dirty = true;
+  }
+  
+  // Suscripción a cambios en la configuración de visualización
+  let configUnsubscribe = null;
+  try {
+    configUnsubscribe = configService.onConfigChange('visualization_config', (newConfig) => {
+      if (newConfig && newConfig.chartPoints) {
+        const newMaxPoints = newConfig.chartPoints;
+        if (newMaxPoints !== finalMaxPoints) {
+          console.log(`[ChartWidget] Actualizando puntos máximos: ${finalMaxPoints} → ${newMaxPoints}`);
+          finalMaxPoints = newMaxPoints;
+          // Ajustar buffer si es necesario
+          while (data.length > finalMaxPoints) {
+            data.shift();
+          }
+          dirty = true; // Forzar redibujado
+        }
+      }
+    });
+  } catch (error) {
+    console.warn('[ChartWidget] Error suscribiéndose a cambios de configuración:', error);
   }
 
   // Render simple
@@ -131,6 +153,7 @@ export async function chartWidget({
   const observer = new MutationObserver(() => {
     if (!document.body.contains(root)) {
       if (unsubscribe) unsubscribe();
+      if (configUnsubscribe) configUnsubscribe();
       observer.disconnect();
     }
   });
