@@ -55,19 +55,31 @@ export class RTClient {
       const payload = data.payload;
       if (!payload) return;
 
+      // Extraer información del dispositivo/sensor del payload
+      const deviceInfo = {
+        sensorId: payload.sensor_id || payload.id || payload.sensorId,
+        deviceId: payload.device_id || payload.gateway_id || payload.deviceId,
+        deviceType: payload.device_type || payload.deviceType,
+        endpointId: payload.endpoint_id || payload.endpointId,
+        ...payload
+      };
+
       // Verificar temperatura
-      if (payload.temperature !== undefined) {
-        window.alertService.checkTemperature(payload.temperature);
+      if (payload.temperature !== undefined || payload.temp !== undefined || payload.temperatura !== undefined) {
+        const temp = payload.temperature || payload.temp || payload.temperatura;
+        window.alertService.checkTemperature(temp, deviceInfo);
       }
 
       // Verificar humedad
-      if (payload.humidity !== undefined) {
-        window.alertService.checkHumidity(payload.humidity);
+      if (payload.humidity !== undefined || payload.humedad !== undefined || payload.hum !== undefined) {
+        const hum = payload.humidity || payload.humedad || payload.hum;
+        window.alertService.checkHumidity(hum, deviceInfo);
       }
 
       // Verificar CO2
       if (payload.co2 !== undefined || payload.CO2 !== undefined) {
-        window.alertService.checkCO2(payload.co2 || payload.CO2);
+        const co2 = payload.co2 || payload.CO2;
+        window.alertService.checkCO2(co2, deviceInfo);
       }
     } catch (error) {
       console.warn("[WS] Error procesando alertas:", error);

@@ -6,6 +6,7 @@
 import { el } from "../utils/dom.js";
 import { setDevices } from "../state/store.js";
 import { DevicesAPI, GatewayAPI } from "../api.js";
+import { configService } from "../utils/configService.js";
 
 export async function render() {
   let lastUpdate = null;
@@ -1058,28 +1059,362 @@ export async function render() {
 
   // Crear gráfico de series temporales basado en datos históricos de InfluxDB
   async function createInfluxTimeSeriesChart() {
+    // Sistema de filtro de tiempo tipo Grafana
+    const timeRangeStorageKey = 'dispositivos_chart_time_range';
+    let timeRange = {
+      type: 'quick', // 'quick' o 'custom'
+      value: '1h', // '1h', '6h', '24h', '7d' para quick, o { from, to } para custom
+      from: null, // Timestamp para rango personalizado
+      to: null // Timestamp para rango personalizado
+    };
+
+    // Función para cargar rango de tiempo desde localStorage
+    function loadTimeRangeFromStorage() {
+      try {
+        const saved = localStorage.getItem(timeRangeStorageKey);
+        if (saved) {
+          const savedRange = JSON.parse(saved);
+          timeRange = { ...timeRange, ...savedRange };
+        }
+      } catch (error) {
+        console.warn('[Dispositivos Chart] Error cargando rango de tiempo:', error);
+      }
+    }
+
+    // Función para guardar rango de tiempo en localStorage
+    function saveTimeRangeToStorage() {
+      try {
+        localStorage.setItem(timeRangeStorageKey, JSON.stringify(timeRange));
+      } catch (error) {
+        console.warn('[Dispositivos Chart] Error guardando rango de tiempo:', error);
+      }
+    }
+
+    // Función para calcular el rango de tiempo actual
+    function getCurrentTimeRange() {
+      const now = Date.now();
+      let from, to = now;
+
+      if (timeRange.type === 'quick') {
+        const hours = {
+          '1h': 1,
+          '6h': 6,
+          '24h': 24,
+          '7d': 168 // 7 días = 168 horas
+        };
+        const hoursBack = hours[timeRange.value] || 1;
+        from = now - (hoursBack * 60 * 60 * 1000);
+      } else if (timeRange.type === 'custom') {
+        from = timeRange.from ? new Date(timeRange.from).getTime() : now - (60 * 60 * 1000);
+        to = timeRange.to ? new Date(timeRange.to).getTime() : now;
+      } else {
+        // Fallback a 1 hora
+        from = now - (60 * 60 * 1000);
+      }
+
+      return { from, to };
+    }
+
+    // Función para convertir rango de tiempo a formato para API
+    function getTimeRangeForAPI() {
+      const { from, to } = getCurrentTimeRange();
+      const rangeMs = to - from;
+      const hours = rangeMs / (60 * 60 * 1000);
+      
+      if (hours <= 1) return '1h';
+      if (hours <= 6) return '6h';
+      if (hours <= 24) return '24h';
+      if (hours <= 168) return '7d';
+      return '7d'; // Máximo 7 días
+    }
+
+    // Cargar rango de tiempo al inicializar
+    loadTimeRangeFromStorage();
+
     const chartContainer = el("div", { 
       class: "card dispositivos-section",
       id: "dispositivos-charts",
       style: "margin-top: 15px; margin-bottom: 15px; padding: 10px;" 
     },
-      el("h3", { style: "margin-bottom: 10px; font-size: 1.1em; padding-bottom: 8px; border-bottom: 2px solid #0284c7;" }, "📈 Gráfico de Series Temporales - Datos Históricos InfluxDB"),
-      el("div", { style: "margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;" },
-        el("input", {
-          type: "text",
-          id: "chart-search-input",
-          placeholder: "🔍 Buscar por Endpoint, Sensor o ID...",
-          style: "flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em;",
-          autocomplete: "off"
-        }),
-        el("button", {
-          class: "btn btn-sm",
-          id: "clear-chart-search",
-          style: "padding: 6px 12px; font-size: 0.85em;"
-        }, "Limpiar")
+      // Header con título y controles en la misma fila
+      el("div", {
+        style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #0284c7; gap: 10px;"
+      },
+        // Título (ocupa 2/3)
+        el("h3", {
+          style: "margin: 0; font-size: 1.1em; flex: 2;"
+        }, "📈 Gráfico de Series Temporales - Datos Históricos InfluxDB"),
+        
+        // Contenedor de controles (ocupa 1/3)
+        el("div", {
+          id: "dispositivos-chart-controls-container",
+          style: "flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end;"
+        },
+          // Controles de filtro de tiempo (dropdown sutil)
+          el("div", {
+            id: "dispositivos-time-range-controls",
+            class: "time-range-controls",
+            style: `
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+              width: 100%;
+            `
+          },
+            el("select", {
+              id: "dispositivos-time-range-select",
+              class: "time-range-select"
+            })
+          ),
+          // Controles de búsqueda (compactos)
+          el("div", {
+            style: "display: flex; gap: 4px; align-items: center; width: 100%; flex-direction: column;"
+          },
+            el("input", {
+              type: "text",
+              id: "chart-search-input",
+              placeholder: "🔍 Buscar...",
+              style: "width: 100%; padding: 4px 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.75em;",
+              autocomplete: "off"
+            }),
+            el("button", {
+              class: "btn btn-sm",
+              id: "clear-chart-search",
+              style: "padding: 4px 8px; font-size: 0.7em; width: 100%;"
+            }, "Limpiar")
+          )
+        )
       ),
-      el("div", { id: "influx-chart-content", style: "min-height: 300px; position: relative;" }, "Cargando gráfico...")
+      
+      // Gráfico ocupa el 100% del ancho
+      el("div", {
+        id: "influx-chart-content",
+        style: "min-height: 300px; position: relative; width: 100%;"
+      }, "Cargando gráfico...")
     );
+
+    // Crear controles de tiempo (dropdown)
+    const timeRangeControls = chartContainer.querySelector('#dispositivos-time-range-controls');
+    const timeRangeSelect = chartContainer.querySelector('#dispositivos-time-range-select');
+    
+    // Opciones del dropdown
+    const timeRangeOptions = [
+      { value: '1h', label: 'Última hora' },
+      { value: '6h', label: 'Últimas 6 horas' },
+      { value: '24h', label: 'Últimas 24 horas' },
+      { value: '7d', label: 'Última semana' },
+      { value: 'custom', label: '📅 Personalizado...' }
+    ];
+    
+    // Crear opciones del select
+    timeRangeOptions.forEach(option => {
+      const optionEl = el("option", {
+        value: option.value
+      }, option.label);
+      timeRangeSelect.appendChild(optionEl);
+    });
+    
+    // Establecer valor inicial del select
+    const initialValue = timeRange.type === 'quick' ? timeRange.value : 'custom';
+    timeRangeSelect.value = initialValue;
+    
+    // Event listener para cambio de selección
+    let previousValue = initialValue;
+    
+    timeRangeSelect.addEventListener('change', (e) => {
+      const selectedValue = e.target.value;
+      
+      if (selectedValue === 'custom') {
+        // Guardar valor anterior antes de mostrar el diálogo
+        previousValue = timeRange.type === 'quick' ? timeRange.value : 'custom';
+        showCustomTimeRangeDialog();
+      } else {
+        timeRange.type = 'quick';
+        timeRange.value = selectedValue;
+        saveTimeRangeToStorage();
+        updateTimeRangeIndicator();
+        loadChartData();
+        previousValue = selectedValue;
+      }
+    });
+    
+    // Función para restaurar valor anterior del select
+    function restorePreviousSelectValue() {
+      if (timeRangeSelect) {
+        timeRangeSelect.value = previousValue;
+      }
+    }
+
+    // Indicador de rango de tiempo actual (compacto)
+    const timeRangeIndicator = el("div", {
+      id: "dispositivos-time-range-indicator",
+      class: "time-range-indicator",
+      style: `
+        font-size: 0.65rem;
+        color: #666;
+        font-weight: 500;
+        margin-top: 4px;
+        text-align: right;
+        width: 100%;
+      `
+    });
+
+    function updateTimeRangeIndicator() {
+      const { from, to } = getCurrentTimeRange();
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+      const formatTime = (date) => {
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const day = date.getDate();
+        const month = date.getMonth() + 1;
+        return `${day}/${month} ${hours}:${minutes}`;
+      };
+      timeRangeIndicator.textContent = `${formatTime(fromDate)} - ${formatTime(toDate)}`;
+    }
+
+    // Agregar indicador después de los controles (en el contenedor de controles, no dentro de timeRangeControls)
+    const controlsContainer = chartContainer.querySelector('#dispositivos-chart-controls-container');
+    if (controlsContainer) {
+      controlsContainer.appendChild(timeRangeIndicator);
+    }
+    updateTimeRangeIndicator();
+
+    // Función para mostrar diálogo de rango personalizado
+    function showCustomTimeRangeDialog() {
+      const dialog = el("div", {
+        style: `
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.7);
+          z-index: 10000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `
+      });
+
+      const dialogContent = el("div", {
+        style: `
+          background: #ffffff;
+          border: 1px solid #0284c7;
+          border-radius: 8px;
+          padding: 20px;
+          min-width: 300px;
+          max-width: 90vw;
+        `
+      }, 
+        el("h3", {
+          style: "color: #333; margin-bottom: 15px; font-size: 1.1rem;"
+        }, "Seleccionar Rango Personalizado"),
+        el("div", {
+          style: "display: flex; flex-direction: column; gap: 12px;"
+        },
+          el("div", {},
+            el("label", {
+              style: "display: block; color: #666; margin-bottom: 5px; font-size: 0.85rem;"
+            }, "Desde:"),
+            el("input", {
+              type: "datetime-local",
+              id: "dispositivos-custom-time-from",
+              style: `
+                width: 100%;
+                padding: 8px;
+                background: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                color: #333;
+                font-size: 0.9rem;
+              `,
+              value: timeRange.from ? new Date(timeRange.from).toISOString().slice(0, 16) : new Date(Date.now() - 60 * 60 * 1000).toISOString().slice(0, 16)
+            })
+          ),
+          el("div", {},
+            el("label", {
+              style: "display: block; color: #666; margin-bottom: 5px; font-size: 0.85rem;"
+            }, "Hasta:"),
+            el("input", {
+              type: "datetime-local",
+              id: "dispositivos-custom-time-to",
+              style: `
+                width: 100%;
+                padding: 8px;
+                background: #fff;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                color: #333;
+                font-size: 0.9rem;
+              `,
+              value: timeRange.to ? new Date(timeRange.to).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16)
+            })
+          ),
+          el("div", {
+            style: "display: flex; gap: 10px; margin-top: 10px;"
+          },
+            el("button", {
+              class: "btn",
+              style: `
+                flex: 1;
+                padding: 10px;
+                background: #0284c7;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: 600;
+              `,
+              onclick: () => {
+                const fromInput = document.getElementById('dispositivos-custom-time-from');
+                const toInput = document.getElementById('dispositivos-custom-time-to');
+                if (fromInput && toInput) {
+                  timeRange.type = 'custom';
+                  timeRange.from = new Date(fromInput.value).toISOString();
+                  timeRange.to = new Date(toInput.value).toISOString();
+                  saveTimeRangeToStorage();
+                  // Actualizar select para mostrar "Personalizado"
+                  if (timeRangeSelect) {
+                    timeRangeSelect.value = 'custom';
+                  }
+                  updateTimeRangeIndicator();
+                  loadChartData();
+                }
+                document.body.removeChild(dialog);
+              }
+            }, "Aplicar"),
+            el("button", {
+              class: "btn",
+              style: `
+                flex: 1;
+                padding: 10px;
+                background: #666;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+              `,
+              onclick: () => {
+                restorePreviousSelectValue();
+                document.body.removeChild(dialog);
+              }
+            }, "Cancelar")
+          )
+        )
+      );
+
+      dialog.appendChild(dialogContent);
+      document.body.appendChild(dialog);
+
+      // Cerrar al hacer clic fuera
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+          restorePreviousSelectValue();
+          document.body.removeChild(dialog);
+        }
+      });
+    }
 
     let chartData = [];
     let filteredChartData = [];
@@ -1089,18 +1424,23 @@ export async function render() {
     canvas.height = 400;
     canvas.style.cssText = "max-width:100%;height:auto;border:1px solid #242b36;border-radius:8px;background:#1a1f2e;cursor: crosshair;";
     
+    // Referencia al contenedor del gráfico
     const chartContent = chartContainer.querySelector('#influx-chart-content');
     
     // Función para cargar datos de InfluxDB para el gráfico
     async function loadChartData() {
       try {
-        chartContent.innerHTML = '';
-        chartContent.appendChild(el('div', { style: 'text-align:center; padding:20px; color:#666;' }, 'Cargando datos históricos...'));
+        if (chartContent) {
+          chartContent.innerHTML = '';
+          chartContent.appendChild(el('div', { style: 'text-align:center; padding:20px; color:#666;' }, 'Cargando datos históricos...'));
+        }
         
         // Obtener dispositivos
         const devicesResponse = await DevicesAPI.getAllDevices();
         if (!devicesResponse.success || !Array.isArray(devicesResponse.data)) {
-          chartContent.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay dispositivos disponibles</div>';
+          if (chartContent) {
+            chartContent.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay dispositivos disponibles</div>';
+          }
           return;
         }
 
@@ -1108,23 +1448,45 @@ export async function render() {
         const sensors = devices.filter(d => d.tipo === 'sensor');
         
         if (sensors.length === 0) {
-          chartContent.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay sensores disponibles</div>';
+          if (chartContent) {
+            chartContent.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No hay sensores disponibles</div>';
+          }
           return;
         }
 
-        // Cargar datos históricos de InfluxDB (última hora)
+        // Obtener rango de tiempo seleccionado
+        const timeRangeForAPI = getTimeRangeForAPI();
+        const { from: timeFrom, to: timeTo } = getCurrentTimeRange();
+        
+        // Obtener configuración de visualización para límite de puntos
+        const visualizationConfig = configService.getVisualizationConfig();
+        const maxPointsFromConfig = visualizationConfig.chartPoints || 60;
+        
+        // Cargar datos históricos de InfluxDB usando el rango seleccionado
         const seriesData = new Map(); // key: `${endpoint}-${sensor}`, value: {temp: [], hum: []}
         
         for (const sensor of sensors.slice(0, 15)) { // Limitar a 15 sensores
           try {
+            // Calcular número de puntos según el rango de tiempo y configuración
+            const rangeMs = timeTo - timeFrom;
+            const hours = rangeMs / (60 * 60 * 1000);
+            const calculatedPoints = Math.min(Math.max(Math.floor(hours * 60), 20), 200); // Entre 20 y 200 puntos según el rango
+            const points = Math.min(calculatedPoints, maxPointsFromConfig); // Usar el menor entre el calculado y el configurado
+            
             const influxResponse = await DevicesAPI.getHistoricalData(
               sensor.id_dispositivo, 
-              60, // Últimos 60 puntos
-              "1h" // Última hora
+              points,
+              timeRangeForAPI
             );
             
             if (influxResponse.success && Array.isArray(influxResponse.data) && influxResponse.data.length > 0) {
               influxResponse.data.forEach(row => {
+                // Filtrar por rango de tiempo seleccionado
+                const rowTimestamp = row.timestamp ? new Date(row.timestamp).getTime() : null;
+                if (rowTimestamp && (rowTimestamp < timeFrom || rowTimestamp > timeTo)) {
+                  return; // Saltar filas fuera del rango
+                }
+                
                 Object.keys(row).forEach(key => {
                   if (['timestamp', 'topic', 'host'].includes(key)) return;
                   
@@ -1144,7 +1506,7 @@ export async function render() {
                     }
                     
                     const series = seriesData.get(seriesKey);
-                    const timestamp = row.timestamp ? new Date(row.timestamp).getTime() : Date.now();
+                    const timestamp = rowTimestamp || Date.now();
                     
                     if ((property === 'temp' || property === 'temperatura') && row[key] !== undefined) {
                       series.temp.push({ timestamp, value: parseFloat(row[key]) });
@@ -1170,7 +1532,9 @@ export async function render() {
         filterCharts(searchQuery);
       } catch (error) {
         console.error('Error cargando datos para gráfico:', error);
-        chartContent.innerHTML = `<div style="text-align:center; padding:20px; color:#d32f2f;">Error cargando gráfico: ${error.message}</div>`;
+        if (chartContent) {
+          chartContent.innerHTML = `<div style="text-align:center; padding:20px; color:#d32f2f;">Error cargando gráfico: ${error.message}</div>`;
+        }
       }
     }
 
@@ -1202,6 +1566,9 @@ export async function render() {
         }, 'No hay datos para mostrar con los filtros aplicados'));
         return;
       }
+      
+      // Actualizar indicador de tiempo cuando se renderiza
+      updateTimeRangeIndicator();
 
       // Crear contenedor del canvas
       const canvasContainer = el('div', { style: 'position: relative; margin-bottom: 10px;' });
@@ -1226,27 +1593,34 @@ export async function render() {
         ctx.stroke();
       }
 
-      // Calcular rango de tiempo (última hora)
-      const now = Date.now();
-      const oneHourAgo = now - (60 * 60 * 1000);
-      const timeRange = 60 * 60 * 1000;
-
-      // Obtener todos los valores de temperatura y humedad
-      const allTempValues = [];
-      const allHumValues = [];
+      // Calcular rango de tiempo usando el rango seleccionado
+      const { from: timeFrom, to: timeTo } = getCurrentTimeRange();
+      const timeRangeMs = timeTo - timeFrom || (60 * 60 * 1000); // Fallback a 1 hora
+      
+      // Filtrar puntos dentro del rango seleccionado
+      const filteredTempValues = [];
+      const filteredHumValues = [];
       filteredChartData.forEach(series => {
-        series.temp.forEach(p => allTempValues.push(p.value));
-        series.hum.forEach(p => allHumValues.push(p.value));
+        series.temp.forEach(p => {
+          if (p.timestamp >= timeFrom && p.timestamp <= timeTo) {
+            filteredTempValues.push(p.value);
+          }
+        });
+        series.hum.forEach(p => {
+          if (p.timestamp >= timeFrom && p.timestamp <= timeTo) {
+            filteredHumValues.push(p.value);
+          }
+        });
       });
 
-      const tMin = allTempValues.length ? Math.min(...allTempValues) : 0;
-      const tMax = allTempValues.length ? Math.max(...allTempValues) : 1;
+      const tMin = filteredTempValues.length ? Math.min(...filteredTempValues) : 0;
+      const tMax = filteredTempValues.length ? Math.max(...filteredTempValues) : 1;
       const tPad = (tMax - tMin) * 0.1 || 5;
       const tYMin = Math.floor(tMin - tPad);
       const tYMax = Math.ceil(tMax + tPad);
 
-      const hMin = allHumValues.length ? Math.min(...allHumValues) : 0;
-      const hMax = allHumValues.length ? Math.max(...allHumValues) : 100;
+      const hMin = filteredHumValues.length ? Math.min(...filteredHumValues) : 0;
+      const hMax = filteredHumValues.length ? Math.max(...filteredHumValues) : 100;
       const hPad = (hMax - hMin) * 0.1 || 5;
       const hYMin = Math.floor(hMin - hPad);
       const hYMax = Math.ceil(hMax + hPad);
@@ -1261,9 +1635,15 @@ export async function render() {
         return COLORS[index % COLORS.length];
       }
 
-      // Función para calcular posición X desde timestamp
+      // Función para calcular posición X desde timestamp usando el rango seleccionado
       const getXFromTimestamp = (timestamp) => {
-        const normalizedTime = Math.max(0, Math.min(1, (timestamp - oneHourAgo) / timeRange));
+        if (!timestamp) return 20;
+        const ts = timestamp;
+        // Filtrar puntos fuera del rango seleccionado
+        if (ts < timeFrom || ts > timeTo) {
+          return -1; // Retornar -1 para indicar que está fuera del rango
+        }
+        const normalizedTime = Math.max(0, Math.min(1, (ts - timeFrom) / timeRangeMs));
         return 20 + normalizedTime * (W - 40);
       };
 
@@ -1276,18 +1656,31 @@ export async function render() {
         ctx.lineWidth = 2;
         ctx.beginPath();
         
-        series.temp.forEach((p, i) => {
+        let firstPoint = true;
+        series.temp.forEach((p) => {
+          // Filtrar puntos fuera del rango de tiempo seleccionado
+          if (p.timestamp < timeFrom || p.timestamp > timeTo) return;
+          
           const x = getXFromTimestamp(p.timestamp);
+          if (x < 0) return; // Saltar si está fuera del rango
           const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+          if (firstPoint) {
+            ctx.moveTo(x, y);
+            firstPoint = false;
+          } else {
+            ctx.lineTo(x, y);
+          }
         });
-        ctx.stroke();
+        if (!firstPoint) ctx.stroke(); // Solo dibujar si hay al menos un punto
 
         // Puntos de temperatura
         ctx.fillStyle = color;
         series.temp.forEach(p => {
+          // Filtrar puntos fuera del rango
+          if (p.timestamp < timeFrom || p.timestamp > timeTo) return;
+          
           const x = getXFromTimestamp(p.timestamp);
+          if (x < 0) return;
           const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
           ctx.beginPath();
           ctx.arc(x, y, 2, 0, 2 * Math.PI);
@@ -1305,19 +1698,32 @@ export async function render() {
         ctx.setLineDash([5, 4]);
         ctx.beginPath();
         
-        series.hum.forEach((p, i) => {
+        let firstPoint = true;
+        series.hum.forEach((p) => {
+          // Filtrar puntos fuera del rango de tiempo seleccionado
+          if (p.timestamp < timeFrom || p.timestamp > timeTo) return;
+          
           const x = getXFromTimestamp(p.timestamp);
+          if (x < 0) return; // Saltar si está fuera del rango
           const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+          if (firstPoint) {
+            ctx.moveTo(x, y);
+            firstPoint = false;
+          } else {
+            ctx.lineTo(x, y);
+          }
         });
-        ctx.stroke();
+        if (!firstPoint) ctx.stroke(); // Solo dibujar si hay al menos un punto
         ctx.setLineDash([]);
 
         // Puntos de humedad
         ctx.fillStyle = color;
         series.hum.forEach(p => {
+          // Filtrar puntos fuera del rango
+          if (p.timestamp < timeFrom || p.timestamp > timeTo) return;
+          
           const x = getXFromTimestamp(p.timestamp);
+          if (x < 0) return;
           const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
           ctx.beginPath();
           ctx.arc(x, y, 2, 0, 2 * Math.PI);
@@ -1337,18 +1743,25 @@ export async function render() {
       ctx.fillText(`${hYMin}%`, W - 5, H - 15);
       ctx.fillText(`${hYMax}%`, W - 5, 25);
 
-      // Eje X con timestamps (última hora)
+      // Eje X con timestamps usando el rango seleccionado
       ctx.fillStyle = "#9aa4b2";
       ctx.font = "11px system-ui";
       ctx.textAlign = "center";
       
+      // Dibujar 6 etiquetas de tiempo equiespaciadas usando el rango seleccionado
       for (let i = 0; i < 6; i++) {
         const x = 20 + (i / 5) * (W - 40);
-        const timeValue = oneHourAgo + (i / 5) * timeRange;
+        const timeValue = timeFrom + (i / 5) * timeRangeMs;
         const timeDate = new Date(timeValue);
+        
+        // Formatear tiempo según la duración del rango
         const hours = timeDate.getHours().toString().padStart(2, '0');
         const minutes = timeDate.getMinutes().toString().padStart(2, '0');
-        const timeLabel = `${hours}:${minutes}`;
+        const day = timeDate.getDate();
+        const month = timeDate.getMonth() + 1;
+        const timeLabel = timeRangeMs > 24 * 60 * 60 * 1000 
+          ? `${day}/${month} ${hours}:${minutes}` 
+          : `${hours}:${minutes}`;
         
         ctx.fillText(timeLabel, x, H - 5);
         

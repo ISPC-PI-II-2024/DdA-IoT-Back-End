@@ -200,6 +200,9 @@ class ConfigService {
     // Disparar evento personalizado para componentes que no usan onConfigChange
     window.dispatchEvent(new CustomEvent('advancedConfigChanged', { detail: config }));
     
+    // También emitir cambio mediante el sistema de eventos interno
+    this.emitChange(CONFIG_KEYS.ADVANCED, config);
+    
     return localSuccess;
   }
 

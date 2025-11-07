@@ -6,7 +6,9 @@ import { getState, setDevices, selectDevice } from "../state/store.js";
 import { deviceService } from "../utils/deviceService.js";
 
 export async function deviceSelectorWidget() {
-  const { devices, selectedDevice } = getState();
+  const state = getState();
+  const devices = state.devices;
+  const selectedDevice = state.selectedDevice;
   
   // Cargar dispositivos si no están cargados (solo una vez)
   if (devices.length === 0) {

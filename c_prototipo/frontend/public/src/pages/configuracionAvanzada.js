@@ -414,16 +414,42 @@ export async function render() {
 
   // Funciones para manejar la configuración avanzada
   window.saveAdvancedConfig = async function() {
+    // Validar rangos antes de guardar
+    const tempMin = parseFloat(document.getElementById("temp_min").value) || 15.0;
+    const tempMax = parseFloat(document.getElementById("temp_max").value) || 30.0;
+    const tempCriticalMin = parseFloat(document.getElementById("temp_critical_min").value) || 5.0;
+    const tempCriticalMax = parseFloat(document.getElementById("temp_critical_max").value) || 40.0;
+    const humidityMin = parseFloat(document.getElementById("humidity_min").value) || 30.0;
+    const humidityMax = parseFloat(document.getElementById("humidity_max").value) || 80.0;
+    
+    // Validaciones
+    if (tempCriticalMin >= tempMin) {
+      alert("Error: La temperatura crítica mínima debe ser menor que la temperatura mínima normal");
+      return;
+    }
+    if (tempCriticalMax <= tempMax) {
+      alert("Error: La temperatura crítica máxima debe ser mayor que la temperatura máxima normal");
+      return;
+    }
+    if (humidityMin >= humidityMax) {
+      alert("Error: La humedad mínima debe ser menor que la humedad máxima");
+      return;
+    }
+    if (tempMin >= tempMax) {
+      alert("Error: La temperatura mínima debe ser menor que la temperatura máxima");
+      return;
+    }
+    
     const config = {
       thresholds: {
         // Umbrales de temperatura
-        tempMin: parseFloat(document.getElementById("temp_min").value) || 15.0,
-        tempMax: parseFloat(document.getElementById("temp_max").value) || 30.0,
-        tempCriticalMin: parseFloat(document.getElementById("temp_critical_min").value) || 5.0,
-        tempCriticalMax: parseFloat(document.getElementById("temp_critical_max").value) || 40.0,
+        tempMin: tempMin,
+        tempMax: tempMax,
+        tempCriticalMin: tempCriticalMin,
+        tempCriticalMax: tempCriticalMax,
         // Umbrales de humedad
-        humidityMin: parseFloat(document.getElementById("humidity_min").value) || 30.0,
-        humidityMax: parseFloat(document.getElementById("humidity_max").value) || 80.0,
+        humidityMin: humidityMin,
+        humidityMax: humidityMax,
         // Umbral de batería
         batteryLow: parseFloat(document.getElementById("battery_low").value) || 20.0,
         // Umbrales de CO2
@@ -477,13 +503,18 @@ export async function render() {
         
         alert("Configuración avanzada guardada exitosamente");
         console.log("Configuración avanzada:", config);
+        
+        // Recargar configuración en alertService
+        if (window.alertService) {
+          window.alertService.loadConfig();
+        }
       } else {
         throw new Error("Error guardando configuración");
       }
       
     } catch (error) {
       console.error("Error guardando configuración avanzada:", error);
-      alert("Error guardando la configuración");
+      alert("Error guardando la configuración: " + error.message);
     }
   };
 

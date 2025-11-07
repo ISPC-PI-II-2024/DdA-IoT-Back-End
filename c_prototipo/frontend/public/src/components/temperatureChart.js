@@ -9,6 +9,7 @@ import { el } from "../utils/dom.js";
 import { rtClient } from "../ws.js";
 import { mqttTopicsService } from "../utils/mqttTopicsService.js";
 import { configService } from "../utils/configService.js";
+import { alertService } from "../utils/alertService.js";
 
 export async function temperatureChartWidget({ 
   title = "Temperatura MQTT", 
@@ -208,8 +209,243 @@ export async function temperatureChartWidget({
     `
   });
 
+  // Contenedor para controles de filtro de tiempo
+  const timeRangeControls = el("div", {
+    id: "time-range-controls",
+    class: "time-range-controls",
+    style: `
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 8px;
+      background: #2a3f5f;
+      border-radius: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    `
+  });
+
+  // Botones rápidos de tiempo
+  const quickTimeButtons = ['1h', '6h', '24h', '7d'];
+  quickTimeButtons.forEach(btnValue => {
+    const btn = el("button", {
+      class: "btn btn-sm time-range-btn",
+      style: `
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        background: ${timeRange.type === 'quick' && timeRange.value === btnValue ? '#46a0ff' : '#3a4f6f'};
+        color: white;
+        border: ${timeRange.type === 'quick' && timeRange.value === btnValue ? '2px solid #46a0ff' : '1px solid #4a5f7f'};
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+      `,
+      onclick: () => {
+        timeRange.type = 'quick';
+        timeRange.value = btnValue;
+        saveTimeRangeToStorage();
+        dirty = true;
+        // Actualizar estilo de botones
+        timeRangeControls.querySelectorAll('.time-range-btn').forEach(b => {
+          b.style.background = '#3a4f6f';
+          b.style.border = '1px solid #4a5f7f';
+        });
+        btn.style.background = '#46a0ff';
+        btn.style.border = '2px solid #46a0ff';
+        // Actualizar indicador
+        updateTimeRangeIndicator();
+      }
+    }, btnValue === '1h' ? 'Última hora' : btnValue === '6h' ? 'Últimas 6h' : btnValue === '24h' ? 'Últimas 24h' : 'Última semana');
+    timeRangeControls.appendChild(btn);
+  });
+
+  // Botón para selector personalizado
+  const customBtn = el("button", {
+    class: "btn btn-sm time-range-btn",
+    style: `
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      background: ${timeRange.type === 'custom' ? '#46a0ff' : '#3a4f6f'};
+      color: white;
+      border: ${timeRange.type === 'custom' ? '2px solid #46a0ff' : '1px solid #4a5f7f'};
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    `,
+    onclick: () => {
+      showCustomTimeRangeDialog();
+    }
+  }, "📅 Personalizado");
+  timeRangeControls.appendChild(customBtn);
+
+  // Indicador de rango de tiempo actual
+  const timeRangeIndicator = el("div", {
+    id: "time-range-indicator",
+    style: `
+      margin-left: auto;
+      font-size: 0.8rem;
+      color: #9aa4b2;
+      font-weight: 500;
+    `
+  });
+
+  function updateTimeRangeIndicator() {
+    const { from, to } = getCurrentTimeRange();
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const formatTime = (date) => {
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const day = date.getDate();
+      const month = date.getMonth() + 1;
+      return `${day}/${month} ${hours}:${minutes}`;
+    };
+    timeRangeIndicator.textContent = `${formatTime(fromDate)} - ${formatTime(toDate)}`;
+  }
+
+  timeRangeControls.appendChild(timeRangeIndicator);
+  updateTimeRangeIndicator();
+
+  // Función para mostrar diálogo de rango personalizado
+  function showCustomTimeRangeDialog() {
+    const dialog = el("div", {
+      style: `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      `
+    });
+
+    const dialogContent = el("div", {
+      style: `
+        background: #1a1f2e;
+        border: 1px solid #46a0ff;
+        border-radius: 8px;
+        padding: 20px;
+        min-width: 300px;
+        max-width: 90vw;
+      `
+    }, 
+      el("h3", {
+        style: "color: #ffffff; margin-bottom: 15px; font-size: 1.1rem;"
+      }, "Seleccionar Rango Personalizado"),
+      el("div", {
+        style: "display: flex; flex-direction: column; gap: 12px;"
+      },
+        el("div", {},
+          el("label", {
+            style: "display: block; color: #9aa4b2; margin-bottom: 5px; font-size: 0.85rem;"
+          }, "Desde:"),
+          el("input", {
+            type: "datetime-local",
+            id: "custom-time-from",
+            style: `
+              width: 100%;
+              padding: 8px;
+              background: #2a3f5f;
+              border: 1px solid #4a5f7f;
+              border-radius: 4px;
+              color: #ffffff;
+              font-size: 0.9rem;
+            `,
+            value: timeRange.from ? new Date(timeRange.from).toISOString().slice(0, 16) : new Date(Date.now() - 60 * 60 * 1000).toISOString().slice(0, 16)
+          })
+        ),
+        el("div", {},
+          el("label", {
+            style: "display: block; color: #9aa4b2; margin-bottom: 5px; font-size: 0.85rem;"
+          }, "Hasta:"),
+          el("input", {
+            type: "datetime-local",
+            id: "custom-time-to",
+            style: `
+              width: 100%;
+              padding: 8px;
+              background: #2a3f5f;
+              border: 1px solid #4a5f7f;
+              border-radius: 4px;
+              color: #ffffff;
+              font-size: 0.9rem;
+            `,
+            value: timeRange.to ? new Date(timeRange.to).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16)
+          })
+        ),
+        el("div", {
+          style: "display: flex; gap: 10px; margin-top: 10px;"
+        },
+          el("button", {
+            class: "btn",
+            style: `
+              flex: 1;
+              padding: 10px;
+              background: #46a0ff;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-weight: 600;
+            `,
+            onclick: () => {
+              const fromInput = document.getElementById('custom-time-from');
+              const toInput = document.getElementById('custom-time-to');
+              if (fromInput && toInput) {
+                timeRange.type = 'custom';
+                timeRange.from = new Date(fromInput.value).toISOString();
+                timeRange.to = new Date(toInput.value).toISOString();
+                saveTimeRangeToStorage();
+                dirty = true;
+                // Actualizar estilo de botones
+                timeRangeControls.querySelectorAll('.time-range-btn').forEach(b => {
+                  b.style.background = '#3a4f6f';
+                  b.style.border = '1px solid #4a5f7f';
+                });
+                customBtn.style.background = '#46a0ff';
+                customBtn.style.border = '2px solid #46a0ff';
+                updateTimeRangeIndicator();
+              }
+              document.body.removeChild(dialog);
+            }
+          }, "Aplicar"),
+          el("button", {
+            class: "btn",
+            style: `
+              flex: 1;
+              padding: 10px;
+              background: #666;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+            `,
+            onclick: () => {
+              document.body.removeChild(dialog);
+            }
+          }, "Cancelar")
+        )
+      )
+    );
+
+    dialog.appendChild(dialogContent);
+    document.body.appendChild(dialog);
+
+    // Cerrar al hacer clic fuera
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) {
+        document.body.removeChild(dialog);
+      }
+    });
+  }
+
   const root = el("div", { class: "card" },
     el("h3", {}, title),
+    timeRangeControls,
     el("div", { 
       class: "chart-container",
       style: "position: relative;"
@@ -266,6 +502,65 @@ export async function temperatureChartWidget({
   const sensorIds = new Set();
   let dirty = false;
   let lastRenderTime = 0; // Para throttling de renderizado según chartRefreshInterval
+
+  // Sistema de filtro de tiempo tipo Grafana
+  const timeRangeStorageKey = `chart_time_range_${deviceId || 'global'}_${deviceType || 'all'}`;
+  let timeRange = {
+    type: 'quick', // 'quick' o 'custom'
+    value: '1h', // '1h', '6h', '24h', '7d' para quick, o { from, to } para custom
+    from: null, // Timestamp para rango personalizado
+    to: null // Timestamp para rango personalizado
+  };
+
+  // Función para cargar rango de tiempo desde localStorage
+  function loadTimeRangeFromStorage() {
+    try {
+      const saved = localStorage.getItem(timeRangeStorageKey);
+      if (saved) {
+        const savedRange = JSON.parse(saved);
+        timeRange = { ...timeRange, ...savedRange };
+      }
+    } catch (error) {
+      console.warn('[Chart] Error cargando rango de tiempo desde localStorage:', error);
+    }
+  }
+
+  // Función para guardar rango de tiempo en localStorage
+  function saveTimeRangeToStorage() {
+    try {
+      localStorage.setItem(timeRangeStorageKey, JSON.stringify(timeRange));
+    } catch (error) {
+      console.warn('[Chart] Error guardando rango de tiempo en localStorage:', error);
+    }
+  }
+
+  // Función para calcular el rango de tiempo actual
+  function getCurrentTimeRange() {
+    const now = Date.now();
+    let from, to = now;
+
+    if (timeRange.type === 'quick') {
+      const hours = {
+        '1h': 1,
+        '6h': 6,
+        '24h': 24,
+        '7d': 168 // 7 días = 168 horas
+      };
+      const hoursBack = hours[timeRange.value] || 1;
+      from = now - (hoursBack * 60 * 60 * 1000);
+    } else if (timeRange.type === 'custom') {
+      from = timeRange.from ? new Date(timeRange.from).getTime() : now - (60 * 60 * 1000);
+      to = timeRange.to ? new Date(timeRange.to).getTime() : now;
+    } else {
+      // Fallback a 1 hora
+      from = now - (60 * 60 * 1000);
+    }
+
+    return { from, to };
+  }
+
+  // Cargar rango de tiempo al inicializar
+  loadTimeRangeFromStorage();
   
   // Sistema de filtros: Map de series visibles/ocultas
   // key: `${sensorId}:temp` o `${sensorId}:hum`, value: boolean (true = visible)
@@ -407,6 +702,22 @@ export async function temperatureChartWidget({
         timestamp: point.timestamp || point.payload?.timestamp || new Date().toISOString(), 
         value: tempValue 
       });
+      
+      // Verificar alertas de temperatura
+      if (window.alertService) {
+        try {
+          alertService.checkTemperature(tempValue, {
+            sensorId: sid,
+            deviceId: deviceId,
+            deviceType: deviceType,
+            endpointId: point.endpoint_id,
+            id: sid,
+            sensor_id: sid
+          });
+        } catch (error) {
+          console.warn('[Chart] Error verificando alerta de temperatura:', error);
+        }
+      }
     }
     
     // Extraer humedad (soporta diferentes formatos: humidity, humedad, hum)
@@ -424,6 +735,22 @@ export async function temperatureChartWidget({
         timestamp: point.timestamp || point.payload?.timestamp || new Date().toISOString(), 
         value: humValue 
       });
+      
+      // Verificar alertas de humedad
+      if (window.alertService) {
+        try {
+          alertService.checkHumidity(humValue, {
+            sensorId: sid,
+            deviceId: deviceId,
+            deviceType: deviceType,
+            endpointId: point.endpoint_id,
+            id: sid,
+            sensor_id: sid
+          });
+        } catch (error) {
+          console.warn('[Chart] Error verificando alerta de humedad:', error);
+        }
+      }
     }
     
     // Marcar como dirty pero solo actualizar stats inmediatamente
@@ -525,32 +852,36 @@ export async function temperatureChartWidget({
     const hYMin = Math.floor(hMin - hPad);
     const hYMax = Math.ceil(hMax + hPad);
 
-    // Calcular escala de tiempo para el eje X (última hora)
-    const currentTime = Date.now();
-    const oneHourAgo = currentTime - (60 * 60 * 1000);
+    // Calcular escala de tiempo para el eje X usando el rango seleccionado
+    const { from: timeFrom, to: timeTo } = getCurrentTimeRange();
     
-    // Obtener todos los timestamps de todas las series para calcular el rango
+    // Filtrar y obtener todos los timestamps dentro del rango seleccionado
     const allTimestamps = [];
     seriesMap.forEach((arr) => {
       arr.forEach(p => {
         if (p.timestamp) {
           const ts = new Date(p.timestamp).getTime();
-          if (ts >= oneHourAgo && ts <= currentTime) {
+          if (ts >= timeFrom && ts <= timeTo) {
             allTimestamps.push(ts);
           }
         }
       });
     });
     
-    const minTime = allTimestamps.length > 0 ? Math.min(...allTimestamps) : oneHourAgo;
-    const maxTime = allTimestamps.length > 0 ? Math.max(...allTimestamps) : currentTime;
-    const timeRange = maxTime - minTime || (60 * 60 * 1000); // Fallback a 1 hora si no hay datos
+    // Usar el rango seleccionado, pero ajustar si hay datos fuera del rango visible
+    const minTime = allTimestamps.length > 0 ? Math.min(...allTimestamps) : timeFrom;
+    const maxTime = allTimestamps.length > 0 ? Math.max(...allTimestamps) : timeTo;
+    const timeRangeMs = maxTime - minTime || (timeTo - timeFrom) || (60 * 60 * 1000); // Fallback a 1 hora si no hay datos
     
-    // Función para calcular posición X basada en timestamp
+    // Función para calcular posición X basada en timestamp (filtrado por rango)
     const getXFromTimestamp = (timestamp) => {
       if (!timestamp) return 20; // Fallback a inicio
       const ts = new Date(timestamp).getTime();
-      const normalizedTime = Math.max(0, Math.min(1, (ts - minTime) / timeRange));
+      // Filtrar puntos fuera del rango seleccionado
+      if (ts < timeFrom || ts > timeTo) {
+        return -1; // Retornar -1 para indicar que está fuera del rango
+      }
+      const normalizedTime = Math.max(0, Math.min(1, (ts - minTime) / timeRangeMs));
       return 20 + normalizedTime * (W - 40);
     };
     
@@ -560,7 +891,7 @@ export async function temperatureChartWidget({
       return 20 + (i / (totalPoints - 1)) * (W - 40);
     };
 
-    // Dibujar todas las líneas de temperatura (una por sensor) - solo si están visibles
+    // Dibujar todas las líneas de temperatura (una por sensor) - solo si están visibles y dentro del rango
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":temp")) return;
       if (!isSeriesVisible(key)) return; // Saltar si está oculta
@@ -568,25 +899,42 @@ export async function temperatureChartWidget({
       ctx.lineWidth = 2;
       ctx.strokeStyle = color;
       ctx.beginPath();
+      let firstPoint = true;
       arr.forEach((p, i) => {
+        // Filtrar puntos fuera del rango de tiempo seleccionado
+        if (p.timestamp) {
+          const ts = new Date(p.timestamp).getTime();
+          if (ts < timeFrom || ts > timeTo) return; // Saltar puntos fuera del rango
+        }
         // Usar timestamp si está disponible, sino usar índice
         const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
+        if (x < 0) return; // Saltar si está fuera del rango (getXFromTimestamp retorna -1)
         const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        if (firstPoint) {
+          ctx.moveTo(x, y);
+          firstPoint = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
       });
-      ctx.stroke();
+      if (!firstPoint) ctx.stroke(); // Solo dibujar si hay al menos un punto
     });
 
-    // Puntos (temperatura) - dibujar más grandes si están hovered - solo si están visibles
+    // Puntos (temperatura) - dibujar más grandes si están hovered - solo si están visibles y dentro del rango
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":temp")) return;
       if (!isSeriesVisible(key)) return; // Saltar si está oculta
       const color = colorForKey(key);
       ctx.fillStyle = color;
       arr.forEach((p, i) => {
+        // Filtrar puntos fuera del rango de tiempo seleccionado
+        if (p.timestamp) {
+          const ts = new Date(p.timestamp).getTime();
+          if (ts < timeFrom || ts > timeTo) return; // Saltar puntos fuera del rango
+        }
         // Usar timestamp si está disponible, sino usar índice
         const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
+        if (x < 0) return; // Saltar si está fuera del rango
         const y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
         ctx.beginPath();
         // Hacer el punto más grande si está siendo hovered
@@ -611,22 +959,19 @@ export async function temperatureChartWidget({
     ctx.fillText(`${formatTemperature(tYMin)}`, 5, H - 15);
     ctx.fillText(`${formatTemperature(tYMax)}`, 5, 25);
 
-    // Eje X con timestamps de la última hora
+    // Eje X con timestamps usando el rango seleccionado
     ctx.fillStyle = "#9aa4b2";
     ctx.font = "11px system-ui";
     ctx.textAlign = "center";
     
-    // Obtener el rango de tiempo de los datos (última hora) - reutilizar currentTime calculado arriba
-    const oneHourAgoForAxis = currentTime - (60 * 60 * 1000); // 1 hora en milisegundos
-    
-    // Obtener todos los timestamps de todas las series visibles
+    // Obtener todos los timestamps de todas las series visibles dentro del rango
     const allTimestampsForAxis = [];
     seriesMap.forEach((arr, key) => {
       if (isSeriesVisible(key)) {
         arr.forEach(p => {
           if (p.timestamp) {
             const ts = new Date(p.timestamp).getTime();
-            if (ts >= oneHourAgoForAxis && ts <= currentTime) {
+            if (ts >= timeFrom && ts <= timeTo) {
               allTimestampsForAxis.push(ts);
             }
           }
@@ -634,17 +979,35 @@ export async function temperatureChartWidget({
       }
     });
     
-    // Si no hay timestamps, usar índices como fallback
+    // Si no hay timestamps, usar el rango seleccionado directamente
     if (allTimestampsForAxis.length === 0) {
-      // Dibujar etiquetas de tiempo basadas en índices (fallback)
-      for (let i = 0; i < 5; i++) {
-        const x = 20 + (i / 4) * (W - 40);
-        const minutesAgo = 60 - (i * 15); // 60, 45, 30, 15, 0 minutos
-        const timeLabel = minutesAgo === 0 ? "Ahora" : `-${minutesAgo}m`;
+      // Dibujar etiquetas de tiempo basadas en el rango seleccionado
+      for (let i = 0; i < 6; i++) {
+        const x = 20 + (i / 5) * (W - 40);
+        const timeValue = minTime + (i / 5) * timeRangeMs;
+        const timeDate = new Date(timeValue);
+        
+        // Formatear tiempo: HH:MM o DD/MM HH:MM si es más de 24h
+        const hours = timeDate.getHours().toString().padStart(2, '0');
+        const minutes = timeDate.getMinutes().toString().padStart(2, '0');
+        const day = timeDate.getDate();
+        const month = timeDate.getMonth() + 1;
+        const timeLabel = timeRangeMs > 24 * 60 * 60 * 1000 
+          ? `${day}/${month} ${hours}:${minutes}` 
+          : `${hours}:${minutes}`;
+        
         ctx.fillText(timeLabel, x, H - 5);
+        
+        // Dibujar línea vertical sutil para guía
+        ctx.strokeStyle = "#2b3341";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 20);
+        ctx.lineTo(x, H - 20);
+        ctx.stroke();
       }
     } else {
-      // Usar timestamps reales
+      // Usar timestamps reales del rango seleccionado
       const minTimeAxis = Math.min(...allTimestampsForAxis);
       const maxTimeAxis = Math.max(...allTimestampsForAxis);
       const timeRangeAxis = maxTimeAxis - minTimeAxis || 1; // Evitar división por cero
@@ -655,10 +1018,14 @@ export async function temperatureChartWidget({
         const timeValue = minTimeAxis + (i / 5) * timeRangeAxis;
         const timeDate = new Date(timeValue);
         
-        // Formatear tiempo: HH:MM
+        // Formatear tiempo según la duración del rango
         const hours = timeDate.getHours().toString().padStart(2, '0');
         const minutes = timeDate.getMinutes().toString().padStart(2, '0');
-        const timeLabel = `${hours}:${minutes}`;
+        const day = timeDate.getDate();
+        const month = timeDate.getMonth() + 1;
+        const timeLabel = timeRangeMs > 24 * 60 * 60 * 1000 
+          ? `${day}/${month} ${hours}:${minutes}` 
+          : `${hours}:${minutes}`;
         
         ctx.fillText(timeLabel, x, H - 5);
         
@@ -674,7 +1041,7 @@ export async function temperatureChartWidget({
     
     ctx.textAlign = "left";
 
-    // Dibujar todas las líneas de humedad (una por sensor) - con línea discontinua - solo si están visibles
+    // Dibujar todas las líneas de humedad (una por sensor) - con línea discontinua - solo si están visibles y dentro del rango
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":hum")) return;
       if (!isSeriesVisible(key)) return; // Saltar si está oculta
@@ -683,26 +1050,43 @@ export async function temperatureChartWidget({
       ctx.strokeStyle = color;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
+      let firstPoint = true;
       arr.forEach((p, i) => {
+        // Filtrar puntos fuera del rango de tiempo seleccionado
+        if (p.timestamp) {
+          const ts = new Date(p.timestamp).getTime();
+          if (ts < timeFrom || ts > timeTo) return; // Saltar puntos fuera del rango
+        }
         // Usar timestamp si está disponible, sino usar índice
         const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
+        if (x < 0) return; // Saltar si está fuera del rango
         const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        if (firstPoint) {
+          ctx.moveTo(x, y);
+          firstPoint = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
       });
-      ctx.stroke();
+      if (!firstPoint) ctx.stroke(); // Solo dibujar si hay al menos un punto
       ctx.setLineDash([]);
     });
     
-    // Puntos (humedad) - dibujar más grandes si están hovered - solo si están visibles
+    // Puntos (humedad) - dibujar más grandes si están hovered - solo si están visibles y dentro del rango
     seriesMap.forEach((arr, key) => {
       if (!key.endsWith(":hum")) return;
       if (!isSeriesVisible(key)) return; // Saltar si está oculta
       const color = colorForKey(key);
       ctx.fillStyle = color;
       arr.forEach((p, i) => {
+        // Filtrar puntos fuera del rango de tiempo seleccionado
+        if (p.timestamp) {
+          const ts = new Date(p.timestamp).getTime();
+          if (ts < timeFrom || ts > timeTo) return; // Saltar puntos fuera del rango
+        }
         // Usar timestamp si está disponible, sino usar índice
         const x = p.timestamp ? getXFromTimestamp(p.timestamp) : getXFromIndex(i, arr.length);
+        if (x < 0) return; // Saltar si está fuera del rango
         const y = H - 20 - ((p.value - hYMin) / (hYMax - hYMin)) * (H - 40);
         ctx.beginPath();
         // Hacer el punto más grande si está siendo hovered
@@ -775,27 +1159,30 @@ export async function temperatureChartWidget({
     let closestPoint = null;
     let minDistance = HOVER_THRESHOLD;
     
-    // Calcular escala de tiempo para hover (igual que en draw)
-    const currentTimeForHover = Date.now();
-    const oneHourAgoForHover = currentTimeForHover - (60 * 60 * 1000);
+    // Calcular escala de tiempo para hover usando el rango seleccionado
+    const { from: timeFromForHover, to: timeToForHover } = getCurrentTimeRange();
     const allTimestampsForHover = [];
     seriesMap.forEach((arr) => {
       arr.forEach(p => {
         if (p.timestamp) {
           const ts = new Date(p.timestamp).getTime();
-          if (ts >= oneHourAgoForHover && ts <= currentTimeForHover) {
+          if (ts >= timeFromForHover && ts <= timeToForHover) {
             allTimestampsForHover.push(ts);
           }
         }
       });
     });
-    const minTimeForHover = allTimestampsForHover.length > 0 ? Math.min(...allTimestampsForHover) : oneHourAgoForHover;
-    const maxTimeForHover = allTimestampsForHover.length > 0 ? Math.max(...allTimestampsForHover) : currentTimeForHover;
-    const timeRangeForHover = maxTimeForHover - minTimeForHover || (60 * 60 * 1000);
+    const minTimeForHover = allTimestampsForHover.length > 0 ? Math.min(...allTimestampsForHover) : timeFromForHover;
+    const maxTimeForHover = allTimestampsForHover.length > 0 ? Math.max(...allTimestampsForHover) : timeToForHover;
+    const timeRangeForHover = maxTimeForHover - minTimeForHover || (timeToForHover - timeFromForHover) || (60 * 60 * 1000);
     
     const getXFromTimestampForHover = (timestamp) => {
       if (!timestamp) return 20;
       const ts = new Date(timestamp).getTime();
+      // Filtrar puntos fuera del rango seleccionado
+      if (ts < timeFromForHover || ts > timeToForHover) {
+        return -1; // Retornar -1 para indicar que está fuera del rango
+      }
       const normalizedTime = Math.max(0, Math.min(1, (ts - minTimeForHover) / timeRangeForHover));
       return 20 + normalizedTime * (W - 40);
     };
@@ -805,11 +1192,19 @@ export async function temperatureChartWidget({
       return 20 + (i / (totalPoints - 1)) * (W - 40);
     };
     
-    // Buscar en todas las series (temperatura y humedad)
+    // Buscar en todas las series (temperatura y humedad) - solo dentro del rango seleccionado
     seriesMap.forEach((arr, key) => {
       arr.forEach((p, i) => {
+        // Filtrar puntos fuera del rango de tiempo seleccionado
+        if (p.timestamp) {
+          const ts = new Date(p.timestamp).getTime();
+          if (ts < timeFromForHover || ts > timeToForHover) return; // Saltar puntos fuera del rango
+        }
+        
         // Usar timestamp si está disponible, sino usar índice
         const x = p.timestamp ? getXFromTimestampForHover(p.timestamp) : getXFromIndexForHover(i, arr.length);
+        if (x < 0) return; // Saltar si está fuera del rango
+        
         let y;
         if (key.endsWith(":temp")) {
           y = H - 20 - ((p.value - tYMin) / (tYMax - tYMin)) * (H - 40);
@@ -961,15 +1356,35 @@ export async function temperatureChartWidget({
   let configUnsubscribe = null;
   try {
     configUnsubscribe = configService.onConfigChange('visualization_config', (newConfig) => {
-      if (newConfig && newConfig.chartRefresh) {
-        const newInterval = Math.max(newConfig.chartRefresh, 15000);
-        if (newInterval !== chartRefreshInterval) {
-          console.log(`[TemperatureChart] Actualizando intervalo de renderizado: ${chartRefreshInterval}ms → ${newInterval}ms`);
-          // Actualizar el intervalo dinámicamente
-          chartRefreshInterval = newInterval;
-          // Forzar un renderizado inmediato con el nuevo intervalo
-          lastRenderTime = 0; // Permitir renderizado inmediato
-          dirty = true; // Marcar como sucio para forzar renderizado
+      if (newConfig) {
+        // Actualizar chartRefresh si cambió
+        if (newConfig.chartRefresh) {
+          const newInterval = Math.max(newConfig.chartRefresh, 15000);
+          if (newInterval !== chartRefreshInterval) {
+            console.log(`[TemperatureChart] Actualizando intervalo de renderizado: ${chartRefreshInterval}ms → ${newInterval}ms`);
+            chartRefreshInterval = newInterval;
+            lastRenderTime = 0; // Permitir renderizado inmediato
+            dirty = true;
+          }
+        }
+        
+        // Actualizar maxPoints si cambió
+        if (newConfig.chartPoints && newConfig.chartPoints !== finalMaxPoints) {
+          console.log(`[TemperatureChart] Actualizando límite de puntos: ${finalMaxPoints} → ${newConfig.chartPoints}`);
+          // Limitar series existentes al nuevo máximo
+          seriesMap.forEach((arr, key) => {
+            if (arr.length > newConfig.chartPoints) {
+              const excess = arr.length - newConfig.chartPoints;
+              arr.splice(0, excess);
+            }
+          });
+          dirty = true;
+        }
+        
+        // Actualizar unidad de temperatura si cambió
+        if (newConfig.temperatureUnit && newConfig.temperatureUnit !== temperatureUnit) {
+          console.log(`[TemperatureChart] Actualizando unidad de temperatura: ${temperatureUnit} → ${newConfig.temperatureUnit}`);
+          dirty = true; // Forzar re-render para actualizar etiquetas
         }
       }
     });

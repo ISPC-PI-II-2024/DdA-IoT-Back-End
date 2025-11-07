@@ -17,6 +17,9 @@ function buildLeft(role) {
   // Contenedor de navegación con clase esperada por el CSS
   const nav = el("nav", { class: "navbar-nav" });
   
+  // Home - punto de entrada principal
+  nav.appendChild(navLink("home", "Home"));
+  
   // Público
   nav.appendChild(navLink("dashboard", "Dashboard"));
   

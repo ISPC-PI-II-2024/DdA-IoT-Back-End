@@ -9,6 +9,7 @@ import { initRouter } from "./router/index.js";
 import { renderFooter } from "./components/footer.js";
 import { initSession, updateLastActivity, isSessionExpired, clearSession } from "./api.js";
 import { storage } from "./utils/storage.js";
+import "./components/alertNotification.js"; // Inicializar sistema de notificaciones push/pop-up
 
 // Sistema de tracking de actividad del usuario
 let activityTrackingInterval = null;

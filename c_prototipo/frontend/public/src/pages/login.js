@@ -41,7 +41,7 @@ async function initGoogle(container) {
         await new Promise(resolve => setTimeout(resolve, 50));
         
         // Redirigir explícitamente sin recargar
-        window.location.hash = "#/dashboard";
+        window.location.hash = "#/home";
         
         // Trigger hashchange para asegurar que se detecte
         window.dispatchEvent(new HashChangeEvent("hashchange"));
